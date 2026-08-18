@@ -3,6 +3,7 @@ import prisma from '../lib/prisma';
 import { SeeDance2Service } from '../services/seedance2.service';
 import { VideoDownloaderService } from '../services/video-downloader.service';
 import { KeyEncryptionService } from '../services/key-encryption.service';
+import { TaskNotifier } from '../websocket/task-notifier';
 
 export interface TaskJobData {
   taskId: string;
@@ -38,6 +39,9 @@ export const setupTaskProcessor = (queue: Queue.Queue) => {
           startedAt: new Date(),
         },
       });
+
+      // 发送 WebSocket 通知
+      TaskNotifier.emitTaskStatus(task.userId, taskId, 'PROCESSING');
 
       // 解密 API Key
       const decryptedKey = KeyEncryptionService.decrypt(apiKey.keyValue);
@@ -75,6 +79,12 @@ export const setupTaskProcessor = (queue: Queue.Queue) => {
         },
       });
 
+      // 发送 WebSocket 通知
+      TaskNotifier.emitTaskStatus(task.userId, taskId, 'COMPLETED', {
+        resultUrl: result.videoUrl,
+        localPath,
+      });
+
       // 记录使用量
       await prisma.usageLog.create({
         data: {
@@ -91,6 +101,9 @@ export const setupTaskProcessor = (queue: Queue.Queue) => {
     } catch (error: any) {
       console.error(`Task ${taskId} failed:`, error.message);
 
+      // 获取任务信息以便发送通知
+      const task = await prisma.task.findUnique({ where: { id: taskId } });
+
       // 更新任务状态为失败
       await prisma.task.update({
         where: { id: taskId },
@@ -100,6 +113,13 @@ export const setupTaskProcessor = (queue: Queue.Queue) => {
           completedAt: new Date(),
         },
       });
+
+      // 发送 WebSocket 通知
+      if (task) {
+        TaskNotifier.emitTaskStatus(task.userId, taskId, 'FAILED', {
+          errorMessage: error.message,
+        });
+      }
 
       // 如果是 API Key 问题，禁用该 Key
       if (error.message.includes('Invalid API key') || error.message.includes('unauthorized')) {

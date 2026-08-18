@@ -28,6 +28,7 @@
     "express": "^5.2.1",
     "ioredis": "^6.0.0",
     "jsonwebtoken": "^9.0.3",
+    "socket.io": "^4.8.3",
     "ws": "^8.21.3"
   },
   "devDependencies": {
@@ -38,6 +39,7 @@
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.2.0",
+    "@types/socket.io": "^3.0.1",
     "@types/ws": "^8.18.1",
     "prisma": "^6.19.3",
     "ts-node": "^10.9.2",
