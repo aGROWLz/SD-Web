@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth.routes';
+import keyRoutes from './routes/key.routes';
 
 dotenv.config();
 
@@ -17,6 +18,7 @@ app.get('/health', (req, res) => {
 
 // 注册路由
 app.use('/api/auth', authRoutes);
+app.use('/api/keys', keyRoutes);
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
