@@ -1,0 +1,104 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  PREMIUM
+  FREE
+}
+
+enum KeyType {
+  PLATFORM
+  USER_OWNED
+}
+
+enum TaskStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  role         UserRole @default(FREE)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  apiKeys    ApiKey[]
+  tasks      Task[]
+  usageLogs  UsageLog[]
+
+  @@map("users")
+}
+
+model ApiKey {
+  id         String   @id @default(uuid())
+  name       String
+  keyValue   String   @map("key_value")
+  type       KeyType
+  ownerId    String?  @map("owner_id")
+  isActive   Boolean  @default(true) @map("is_active")
+  rateLimit  Int      @default(60) @map("rate_limit")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  owner      User?      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  tasks      Task[]
+  usageLogs  UsageLog[]
+
+  @@index([ownerId])
+  @@index([type, isActive])
+  @@map("api_keys")
+}
+
+model Task {
+  id            String      @id @default(uuid())
+  userId        String      @map("user_id")
+  apiKeyId      String      @map("api_key_id")
+  status        TaskStatus  @default(PENDING)
+  prompt        String
+  params        Json?
+  resultUrl     String?     @map("result_url")
+  localPath     String?     @map("local_path")
+  errorMessage  String?     @map("error_message")
+  startedAt     DateTime?   @map("started_at")
+  completedAt   DateTime?   @map("completed_at")
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  apiKey        ApiKey      @relation(fields: [apiKeyId], references: [id])
+  usageLogs     UsageLog[]
+
+  @@index([userId, status])
+  @@index([apiKeyId])
+  @@index([createdAt])
+  @@map("tasks")
+}
+
+model UsageLog {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  apiKeyId   String   @map("api_key_id")
+  taskId     String   @map("task_id")
+  cost       Decimal  @db.Decimal(10, 2)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  apiKey     ApiKey   @relation(fields: [apiKeyId], references: [id])
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([apiKeyId])
+  @@map("usage_logs")
+}
