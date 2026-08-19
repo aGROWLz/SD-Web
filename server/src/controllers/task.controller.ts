@@ -6,11 +6,11 @@ import { setupTaskProcessor } from '../queue/task-processor';
 import path from 'path';
 import fs from 'fs/promises';
 import { config } from '../config/env';
+import { normalizeSeedanceRequest } from '../domain/seedance';
 
 // 每日配额限制
 const DAILY_QUOTA: Record<string, number> = {
-  FREE: 10,
-  PREMIUM: 100,
+  USER: 100,
   ADMIN: 999999,
 };
 
@@ -32,7 +32,7 @@ const getQueryParam = (param: any): string | undefined => {
  */
 export const createTask = async (req: AuthRequest, res: Response) => {
   try {
-    const { prompt, params } = req.body;
+    const { prompt, params = {} } = req.body;
     const userId = req.user!.userId;
 
     if (!prompt || typeof prompt !== 'string') {
@@ -46,6 +46,10 @@ export const createTask = async (req: AuthRequest, res: Response) => {
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (user.role !== 'ADMIN' && !user.canGenerate) {
+      return res.status(403).json({ error: '当前账号暂未获得视频生成权限' });
     }
 
     // 检查每日配额
@@ -70,59 +74,46 @@ export const createTask = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // 选择 API Key（优先用户自己的，否则用平台 Key）
-    let apiKey = await prisma.apiKey.findFirst({
-      where: {
-        type: 'USER_OWNED',
-        ownerId: userId,
-        isActive: true,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
+    const relayStation = await prisma.relayStation.findFirst({
+      where: { isActive: true, isPrimary: true },
+      orderBy: { updatedAt: 'desc' },
     });
 
-    if (!apiKey) {
-      // 使用平台 Key
-      apiKey = await prisma.apiKey.findFirst({
-        where: {
-          type: 'PLATFORM',
-          isActive: true,
-        },
-        orderBy: {
-          createdAt: 'asc',
-        },
+    if (!relayStation) {
+      return res.status(503).json({
+        error: '当前没有可用的主中转站，请联系管理员配置',
       });
     }
 
-    if (!apiKey) {
-      return res.status(503).json({
-        error: 'No available API keys. Please add your own SeeDance2 API key.',
-      });
+    let normalizedParams;
+    try {
+      normalizedParams = normalizeSeedanceRequest(prompt, params);
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message });
     }
 
     // 创建任务
     const task = await prisma.task.create({
       data: {
         userId,
-        apiKeyId: apiKey.id,
+        relayStationId: relayStation.id,
         prompt,
-        params: params || {},
+        params: normalizedParams as any,
         status: 'PENDING',
       },
       include: {
-        apiKey: {
+        relayStation: {
           select: {
             id: true,
             name: true,
-            type: true,
+            baseUrl: true,
           },
         },
       },
     });
 
     // 获取队列并设置处理器
-    const queue = QueueManager.getQueue(apiKey.id);
+    const queue = QueueManager.getQueue(relayStation.id);
     
     // 确保处理器已设置（Bull 队列会自动管理处理器）
     setupTaskProcessor(queue);
@@ -131,15 +122,15 @@ export const createTask = async (req: AuthRequest, res: Response) => {
     await queue.add(
       {
         taskId: task.id,
-        apiKeyId: apiKey.id,
+        relayStationId: relayStation.id,
       },
       {
         jobId: task.id,
-        priority: user.role === 'PREMIUM' || user.role === 'ADMIN' ? 1 : 10,
+        priority: user.role === 'ADMIN' ? 1 : 5,
       }
     );
 
-    console.log(`Task ${task.id} added to queue for API key ${apiKey.id}`);
+    console.log(`Task ${task.id} added to queue for relay station ${relayStation.id}`);
 
     res.status(201).json({
       task: {
@@ -148,7 +139,7 @@ export const createTask = async (req: AuthRequest, res: Response) => {
         prompt: task.prompt,
         params: task.params,
         createdAt: task.createdAt,
-        apiKey: task.apiKey,
+        relayStation: task.relayStation,
       },
     });
   } catch (error) {
@@ -196,11 +187,10 @@ export const getTasks = async (req: AuthRequest, res: Response) => {
           createdAt: 'desc',
         },
         include: {
-          apiKey: {
+          relayStation: {
             select: {
               id: true,
               name: true,
-              type: true,
             },
           },
           user: {
@@ -241,11 +231,10 @@ export const getTask = async (req: AuthRequest, res: Response) => {
     const task = await prisma.task.findUnique({
       where: { id },
       include: {
-        apiKey: {
+        relayStation: {
           select: {
             id: true,
             name: true,
-            type: true,
           },
         },
         user: {
@@ -298,7 +287,10 @@ export const deleteTask = async (req: AuthRequest, res: Response) => {
     // 如果任务在队列中，尝试移除
     if (task.status === 'PENDING' || task.status === 'PROCESSING') {
       try {
-        const queue = QueueManager.getQueue(task.apiKeyId);
+        if (!task.relayStationId) {
+          throw new Error('任务未绑定中转站');
+        }
+        const queue = QueueManager.getQueue(task.relayStationId);
         const job = await queue.getJob(task.id);
         
         if (job) {

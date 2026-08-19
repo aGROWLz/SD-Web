@@ -7,6 +7,5 @@ export interface AuthRequest extends Request {
 
 export enum UserRole {
   ADMIN = 'ADMIN',
-  PREMIUM = 'PREMIUM',
-  FREE = 'FREE',
+  USER = 'USER',
 }

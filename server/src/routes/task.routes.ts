@@ -7,6 +7,7 @@ import {
   downloadVideo,
 } from '../controllers/task.controller';
 import { authenticate } from '../middleware/auth';
+import { validateCreateTask, validateParamId } from '../middlewares/validator';
 
 const router = Router();
 
@@ -14,18 +15,18 @@ const router = Router();
 router.use(authenticate);
 
 // 创建任务
-router.post('/', createTask);
+router.post('/', validateCreateTask, createTask);
 
 // 获取任务列表（支持分页和筛选）
 router.get('/', getTasks);
 
 // 获取单个任务详情
-router.get('/:id', getTask);
+router.get('/:id', validateParamId('id'), getTask);
 
 // 删除/取消任务
-router.delete('/:id', deleteTask);
+router.delete('/:id', validateParamId('id'), deleteTask);
 
 // 下载视频文件
-router.get('/:id/download', downloadVideo);
+router.get('/:id/download', validateParamId('id'), downloadVideo);
 
 export default router;

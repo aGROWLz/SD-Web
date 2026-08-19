@@ -1,0 +1,6 @@
+:root { font-family: var(--font-display); color: var(--text-primary); background: var(--bg-primary); font-synthesis: none; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
+html, body, #app { min-height: 100%; margin: 0; }
+body { min-width: 320px; }
+button, input, textarea, select { font: inherit; }
+button { letter-spacing: 0; }
+*, *::before, *::after { box-sizing: border-box; }

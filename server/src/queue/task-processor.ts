@@ -4,35 +4,37 @@ import { SeeDance2Service } from '../services/seedance2.service';
 import { VideoDownloaderService } from '../services/video-downloader.service';
 import { KeyEncryptionService } from '../services/key-encryption.service';
 import { TaskNotifier } from '../websocket/task-notifier';
+import { io } from '../index';
+import { notifyTaskUpdate, notifyTaskCompleted, notifyTaskFailed } from '../socket';
 
 export interface TaskJobData {
   taskId: string;
-  apiKeyId: string;
+  relayStationId: string;
 }
 
 export const setupTaskProcessor = (queue: Queue.Queue) => {
   queue.process(3, async (job: Queue.Job<TaskJobData>) => {
-    const { taskId, apiKeyId } = job.data;
+    const { taskId, relayStationId } = job.data;
 
-    console.log(`Processing task ${taskId} with API key ${apiKeyId}`);
+    console.log(`Processing task ${taskId} with relay station ${relayStationId}`);
 
     try {
-      // 获取任务和 API Key
-      const [task, apiKey] = await Promise.all([
+      // 获取任务和中转站
+      const [task, relayStation] = await Promise.all([
         prisma.task.findUnique({ where: { id: taskId } }),
-        prisma.apiKey.findUnique({ where: { id: apiKeyId } }),
+        prisma.relayStation.findUnique({ where: { id: relayStationId } }),
       ]);
 
       if (!task) {
         throw new Error('Task not found');
       }
 
-      if (!apiKey || !apiKey.isActive) {
-        throw new Error('API key not found or inactive');
+      if (!relayStation || !relayStation.isActive) {
+        throw new Error('中转站不存在或已禁用');
       }
 
       // 更新任务状态为处理中
-      await prisma.task.update({
+      const updatedTask = await prisma.task.update({
         where: { id: taskId },
         data: {
           status: 'PROCESSING',
@@ -40,56 +42,69 @@ export const setupTaskProcessor = (queue: Queue.Queue) => {
         },
       });
 
-      // 发送 WebSocket 通知
+      // 发送 WebSocket 通知（旧版）
       TaskNotifier.emitTaskStatus(task.userId, taskId, 'PROCESSING');
 
-      // 解密 API Key
-      const decryptedKey = KeyEncryptionService.decrypt(apiKey.keyValue);
+      // 发送 Socket.IO 通知（新版）
+      notifyTaskUpdate(io, task.userId, updatedTask);
+
+      // 解密中转站 API Key
+      const decryptedKey = KeyEncryptionService.decrypt(relayStation.apiKeyEncrypted);
 
       // 创建 SeeDance2 客户端
-      const seedance2 = new SeeDance2Service(decryptedKey);
+      const seedance2 = new SeeDance2Service(decryptedKey, relayStation.baseUrl);
+
+      // 构建 SeeDance2 任务参数
+      const seedanceParams = task.params as any;
 
       // 提交任务到 SeeDance2
-      const seedanceTaskId = await seedance2.submitTask({
-        prompt: task.prompt,
-        ...(task.params as any),
-      });
+      const seedanceTaskId = await seedance2.submitTask(seedanceParams);
+
+      console.log(`[TaskProcessor] SeeDance2 任务已提交: ${seedanceTaskId}`);
 
       // 轮询任务状态
       const result = await seedance2.pollTaskUntilComplete(seedanceTaskId);
 
       if (result.status === 'failed') {
-        throw new Error(result.error || 'SeeDance2 task failed');
+        throw new Error(result.error?.message || 'SeeDance2 任务失败');
       }
 
-      // 下载视频
+      if (!result.video_url) {
+        throw new Error('SeeDance2 返回的结果中没有视频 URL');
+      }
+
+      // 下载视频到本地
       const localPath = await VideoDownloaderService.downloadVideo(
-        result.videoUrl!,
+        result.video_url,
         taskId
       );
 
       // 更新任务状态为完成
-      await prisma.task.update({
+      const completedTask = await prisma.task.update({
         where: { id: taskId },
         data: {
           status: 'COMPLETED',
-          resultUrl: result.videoUrl,
+          videoUrl: result.video_url,
           localPath,
           completedAt: new Date(),
         },
       });
 
-      // 发送 WebSocket 通知
+      // 发送 WebSocket 通知（旧版）
       TaskNotifier.emitTaskStatus(task.userId, taskId, 'COMPLETED', {
-        resultUrl: result.videoUrl,
+        videoUrl: result.video_url,
         localPath,
       });
+
+      // 发送 Socket.IO 通知（新版）
+      notifyTaskCompleted(io, task.userId, completedTask);
 
       // 记录使用量
       await prisma.usageLog.create({
         data: {
           userId: task.userId,
-          apiKeyId: apiKey.id,
+          apiKeyId: null,
+          relayStationId: relayStation.id,
           taskId: task.id,
           cost: 1.0, // 根据实际计费规则调整
         },
@@ -105,7 +120,7 @@ export const setupTaskProcessor = (queue: Queue.Queue) => {
       const task = await prisma.task.findUnique({ where: { id: taskId } });
 
       // 更新任务状态为失败
-      await prisma.task.update({
+      const failedTask = await prisma.task.update({
         where: { id: taskId },
         data: {
           status: 'FAILED',
@@ -114,21 +129,18 @@ export const setupTaskProcessor = (queue: Queue.Queue) => {
         },
       });
 
-      // 发送 WebSocket 通知
+      // 发送 WebSocket 通知（旧版）
       if (task) {
         TaskNotifier.emitTaskStatus(task.userId, taskId, 'FAILED', {
           errorMessage: error.message,
         });
+
+        // 发送 Socket.IO 通知（新版）
+        notifyTaskFailed(io, task.userId, failedTask);
       }
 
       // 如果是 API Key 问题，禁用该 Key
-      if (error.message.includes('Invalid API key') || error.message.includes('unauthorized')) {
-        await prisma.apiKey.update({
-          where: { id: apiKeyId },
-          data: { isActive: false },
-        });
-        console.log(`API key ${apiKeyId} disabled due to authentication error`);
-      }
+      // 站点鉴权错误不自动删除或泄露中转站配置，交由管理员确认。
 
       throw error;
     }

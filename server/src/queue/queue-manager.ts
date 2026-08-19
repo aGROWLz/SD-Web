@@ -8,8 +8,8 @@ interface QueueMap {
 export class QueueManager {
   private static queues: QueueMap = {};
 
-  static getQueue(apiKeyId: string): Queue.Queue {
-    const queueName = `seedance2:key:${apiKeyId}`;
+  static getQueue(relayStationId: string): Queue.Queue {
+    const queueName = `seedance2:relay:${relayStationId}`;
 
     if (!this.queues[queueName]) {
       this.queues[queueName] = new Queue(queueName, {

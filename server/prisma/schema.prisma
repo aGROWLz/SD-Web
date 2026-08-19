@@ -12,8 +12,7 @@ datasource db {
 
 enum UserRole {
   ADMIN
-  PREMIUM
-  FREE
+  USER
 }
 
 enum KeyType {
@@ -32,7 +31,8 @@ model User {
   id           String   @id @default(uuid())
   email        String   @unique
   passwordHash String   @map("password_hash")
-  role         UserRole @default(FREE)
+  role         UserRole @default(USER)
+  canGenerate  Boolean  @default(true) @map("can_generate")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
@@ -65,23 +65,27 @@ model ApiKey {
 model Task {
   id            String      @id @default(uuid())
   userId        String      @map("user_id")
-  apiKeyId      String      @map("api_key_id")
+  apiKeyId      String?     @map("api_key_id")
+  relayStationId String?    @map("relay_station_id")
   status        TaskStatus  @default(PENDING)
   prompt        String
   params        Json?
-  resultUrl     String?     @map("result_url")
+  videoUrl      String?     @map("result_url")
   localPath     String?     @map("local_path")
   errorMessage  String?     @map("error_message")
   startedAt     DateTime?   @map("started_at")
   completedAt   DateTime?   @map("completed_at")
   createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
 
   user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  apiKey        ApiKey      @relation(fields: [apiKeyId], references: [id])
+  apiKey        ApiKey?     @relation(fields: [apiKeyId], references: [id])
+  relayStation  RelayStation? @relation(fields: [relayStationId], references: [id])
   usageLogs     UsageLog[]
 
   @@index([userId, status])
   @@index([apiKeyId])
+  @@index([relayStationId])
   @@index([createdAt])
   @@map("tasks")
 }
@@ -89,16 +93,36 @@ model Task {
 model UsageLog {
   id         String   @id @default(uuid())
   userId     String   @map("user_id")
-  apiKeyId   String   @map("api_key_id")
+  apiKeyId   String?  @map("api_key_id")
+  relayStationId String? @map("relay_station_id")
   taskId     String   @map("task_id")
   cost       Decimal  @db.Decimal(10, 2)
   createdAt  DateTime @default(now()) @map("created_at")
 
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  apiKey     ApiKey   @relation(fields: [apiKeyId], references: [id])
+  apiKey     ApiKey?  @relation(fields: [apiKeyId], references: [id])
+  relayStation RelayStation? @relation(fields: [relayStationId], references: [id])
   task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
   @@index([apiKeyId])
+  @@index([relayStationId])
   @@map("usage_logs")
+}
+
+model RelayStation {
+  id              String   @id @default(uuid())
+  name            String
+  baseUrl         String   @map("base_url")
+  apiKeyEncrypted String   @map("api_key_encrypted")
+  isActive        Boolean  @default(true) @map("is_active")
+  isPrimary       Boolean  @default(false) @map("is_primary")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  tasks      Task[]
+  usageLogs  UsageLog[]
+
+  @@index([isActive, isPrimary])
+  @@map("relay_stations")
 }

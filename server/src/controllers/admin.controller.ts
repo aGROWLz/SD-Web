@@ -2,6 +2,8 @@ import { Response } from 'express';
 import prisma from '../lib/prisma';
 import { AuthRequest } from '../types';
 import { KeyEncryptionService } from '../services/key-encryption.service';
+import { assertGenerationAccessUpdate } from '../domain/relay-station';
+import { AppError } from '../middlewares/errorHandler';
 
 export const getPlatformKeys = async (req: AuthRequest, res: Response) => {
   try {
@@ -109,6 +111,7 @@ export const getAllUsers = async (req: AuthRequest, res: Response) => {
           id: true,
           email: true,
           role: true,
+          canGenerate: true,
           createdAt: true,
           _count: {
             select: { tasks: true, apiKeys: true },
@@ -132,4 +135,19 @@ export const getAllUsers = async (req: AuthRequest, res: Response) => {
     console.error('Get users error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
+};
+
+export const updateGenerationAccess = async (req: AuthRequest, res: Response) => {
+  const id = req.params.id as string;
+  const { canGenerate } = req.body;
+  const user = await prisma.user.findUnique({ where: { id } });
+  if (!user) throw new AppError('用户不存在', 404);
+  assertGenerationAccessUpdate(user.role, canGenerate);
+
+  const updated = await prisma.user.update({
+    where: { id },
+    data: { canGenerate },
+    select: { id: true, email: true, role: true, canGenerate: true },
+  });
+  res.json({ user: updated });
 };
