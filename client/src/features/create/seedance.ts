@@ -1,8 +1,7 @@
-export type CreateMode = 'text' | 'first-frame' | 'frames' | 'reference' | 'draft'
 export type ModelId = 'doubao-seedance-2-5' | 'doubao-seedance-2-0' | 'doubao-seedance-2-0-fast' | 'doubao-seedance-2-0-mini'
 export type Resolution = '480p' | '720p' | '1080p' | '4k'
 export type Ratio = '16:9' | '4:3' | '1:1' | '3:4' | '9:16' | '21:9' | 'adaptive'
-export type OmniTaskType = 'auto' | 'reference' | 'edit' | 'extend'
+export type ReferenceRole = 'reference_image' | 'reference_video' | 'reference_audio'
 export const MAX_DATA_URL_CHARS = 48 * 1024 * 1024
 
 export interface AssetInput {
@@ -10,12 +9,12 @@ export interface AssetInput {
   kind: 'image' | 'video' | 'audio'
   source: string
   label: string
-  role?: 'first_frame' | 'last_frame' | 'reference_image' | 'reference_video' | 'reference_audio'
+  role?: ReferenceRole
   roleLabel?: string
 }
 
 export interface CreateFormState {
-  mode: CreateMode
+  mode: 'reference'
   prompt: string
   model: ModelId
   resolution: Resolution
@@ -24,24 +23,9 @@ export interface CreateFormState {
   generate_audio: boolean
   watermark: boolean
   output_format: 'mp4' | 'mov'
-  omni_reference_task_type: OmniTaskType
-  return_last_frame: boolean
-  callback_url: string
-  execution_expires_after: number
-  safety_identifier: string
-  priority: number
-  web_search: boolean
+  omni_reference_task_type: 'auto'
   assets: AssetInput[]
-  draftTaskId: string
 }
-
-export const MODE_OPTIONS = [
-  { value: 'text' as const, label: '文生视频', hint: '只用提示词生成画面' },
-  { value: 'first-frame' as const, label: '首帧', hint: '从指定画面开始' },
-  { value: 'frames' as const, label: '首尾帧', hint: '控制开始与结束画面' },
-  { value: 'reference' as const, label: '全模态参考', hint: '组合图片、视频和音频' },
-  { value: 'draft' as const, label: '样片任务', hint: '基于已有样片继续生成' },
-]
 
 export const MODEL_OPTIONS: Array<{ value: ModelId; label: string; resolutions: Resolution[]; maxDuration: number }> = [
   { value: 'doubao-seedance-2-5', label: 'Seedance 2.5', resolutions: ['480p', '720p', '1080p'], maxDuration: 30 },
@@ -51,40 +35,42 @@ export const MODEL_OPTIONS: Array<{ value: ModelId; label: string; resolutions: 
 ]
 
 export const createDefaultForm = (): CreateFormState => ({
-  mode: 'text', prompt: '', model: 'doubao-seedance-2-5', resolution: '720p', ratio: 'adaptive', duration: -1,
-  generate_audio: true, watermark: false, output_format: 'mp4', omni_reference_task_type: 'auto', assets: [], draftTaskId: '',
-  return_last_frame: false, callback_url: '', execution_expires_after: 172800, safety_identifier: '', priority: 0, web_search: false,
+  mode: 'reference',
+  prompt: '',
+  model: 'doubao-seedance-2-5',
+  resolution: '720p',
+  ratio: 'adaptive',
+  duration: -1,
+  generate_audio: true,
+  watermark: false,
+  output_format: 'mp4',
+  omni_reference_task_type: 'auto',
+  assets: [],
 })
 
-type TaskFormInput = Pick<CreateFormState, 'mode' | 'prompt' | 'model' | 'resolution' | 'ratio' | 'duration' | 'generate_audio' | 'watermark' | 'output_format' | 'omni_reference_task_type' | 'assets' | 'draftTaskId'>
-  & Partial<Pick<CreateFormState, 'return_last_frame' | 'callback_url' | 'execution_expires_after' | 'safety_identifier' | 'priority' | 'web_search'>>
+export const referenceRoleForKind = (kind: AssetInput['kind']): ReferenceRole => `reference_${kind}`
 
-export const buildTaskRequest = (form: TaskFormInput) => {
+export const buildTaskRequest = (form: CreateFormState) => {
   const prompt = form.prompt.trim()
-  const content: Record<string, any>[] = []
+  const content: Record<string, unknown>[] = []
   if (prompt) content.push({ type: 'text', text: prompt })
+  content.push(...form.assets.map((asset) => ({
+    type: `${asset.kind}_url`,
+    [`${asset.kind}_url`]: { url: asset.source },
+    role: referenceRoleForKind(asset.kind),
+  })))
 
-  if (form.mode === 'draft') {
-    if (form.draftTaskId.trim()) content.push({ type: 'draft_task', draft_task: { id: form.draftTaskId.trim() } })
-  } else {
-    content.push(...form.assets.map((asset) => ({
-      type: `${asset.kind}_url`,
-      [`${asset.kind}_url`]: { url: asset.source },
-      ...(asset.role ? { role: asset.role } : {}),
-    })))
+  const params: Record<string, unknown> = {
+    model: form.model,
+    content,
+    resolution: form.resolution,
+    ratio: form.ratio,
+    duration: form.duration,
+    generate_audio: form.generate_audio,
+    watermark: form.watermark,
+    output_format: form.output_format,
   }
-
-  const params: Record<string, any> = {
-    model: form.model, content, resolution: form.resolution, ratio: form.ratio, duration: form.duration,
-    generate_audio: form.generate_audio, watermark: form.watermark, output_format: form.output_format,
-  }
-  if (form.mode === 'reference' && form.model === 'doubao-seedance-2-5') params.omni_reference_task_type = form.omni_reference_task_type
-  if (form.return_last_frame !== undefined) params.return_last_frame = form.return_last_frame
-  if (form.callback_url?.trim()) params.callback_url = form.callback_url.trim()
-  if (form.execution_expires_after !== undefined) params.execution_expires_after = form.execution_expires_after
-  if (form.safety_identifier?.trim()) params.safety_identifier = form.safety_identifier.trim()
-  if (form.priority !== undefined) params.priority = form.priority
-  if (form.web_search) params.tools = [{ type: 'web_search' }]
+  if (form.model === 'doubao-seedance-2-5') params.omni_reference_task_type = 'auto'
   return { prompt, params }
 }
 
@@ -99,9 +85,11 @@ export const exceedsDataUrlLimit = (assets: AssetInput[]): boolean => assets
   .filter((asset) => asset.source.startsWith('data:'))
   .reduce((total, asset) => total + asset.source.length, 0) > MAX_DATA_URL_CHARS
 
-export const fileRoleForMode = (mode: CreateMode, kind: AssetInput['kind'], index: number): AssetInput['role'] => {
-  if (mode === 'first-frame' && kind === 'image') return 'first_frame'
-  if (mode === 'frames' && kind === 'image') return index === 0 ? 'first_frame' : 'last_frame'
-  if (mode === 'reference') return `reference_${kind}` as AssetInput['role']
-  return undefined
+export const validateCreateForm = (form: CreateFormState): string => {
+  if (exceedsDataUrlLimit(form.assets)) return '本地素材总大小过大，请减少素材数量或改用 asset:// 素材 ID'
+  if (!form.prompt.trim() && form.assets.length === 0) return '请输入提示词或添加至少一项参考素材'
+
+  const audioOnly = form.assets.length > 0 && form.assets.every((asset) => asset.kind === 'audio')
+  if (form.model !== 'doubao-seedance-2-5' && audioOnly) return 'Seedance 2.0 不能仅使用音频，请再添加图片或视频'
+  return ''
 }
