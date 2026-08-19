@@ -4,6 +4,7 @@ import {
   createDefaultForm,
   exceedsDataUrlLimit,
   MAX_DATA_URL_CHARS,
+  normalizeModelSettings,
   referenceRoleForKind,
   validateCreateForm,
   type AssetInput,
@@ -30,6 +31,33 @@ describe('createDefaultForm', () => {
       omni_reference_task_type: 'auto',
       assets: [],
     })
+  })
+})
+
+describe('normalizeModelSettings', () => {
+  it('falls back to settings supported by the selected model', () => {
+    const form = createForm({
+      model: 'doubao-seedance-2-0-mini',
+      resolution: '1080p',
+      duration: 30,
+      output_format: 'mov',
+    })
+
+    normalizeModelSettings(form)
+
+    expect(form.resolution).toBe('720p')
+    expect(form.duration).toBe(-1)
+    expect(form.output_format).toBe('mp4')
+  })
+
+  it('preserves settings supported by Seedance 2.5', () => {
+    const form = createForm({ resolution: '1080p', duration: 30, output_format: 'mov' })
+
+    normalizeModelSettings(form)
+
+    expect(form.resolution).toBe('1080p')
+    expect(form.duration).toBe(30)
+    expect(form.output_format).toBe('mov')
   })
 })
 

@@ -48,6 +48,15 @@ export const createDefaultForm = (): CreateFormState => ({
   assets: [],
 })
 
+export const normalizeModelSettings = (form: CreateFormState): void => {
+  const model = MODEL_OPTIONS.find((option) => option.value === form.model) ?? MODEL_OPTIONS[0]
+  if (!model.resolutions.includes(form.resolution)) {
+    form.resolution = model.resolutions.includes('720p') ? '720p' : model.resolutions[0]
+  }
+  if (form.duration !== -1 && form.duration > model.maxDuration) form.duration = -1
+  if (form.model !== 'doubao-seedance-2-5') form.output_format = 'mp4'
+}
+
 export const referenceRoleForKind = (kind: AssetInput['kind']): ReferenceRole => `reference_${kind}`
 
 export const buildTaskRequest = (form: CreateFormState) => {

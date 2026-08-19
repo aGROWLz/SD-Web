@@ -1,81 +1,168 @@
 <template>
   <div class="create-page">
-    <div class="page-header">
-      <div><p class="eyebrow">CREATIVE WORKSPACE</p><h1 class="page-title">把想法变成画面</h1><p class="page-subtitle">使用 Seedance 生成视频，所有关键参数都在这里调整。</p></div>
-      <div class="header-meta"><span class="live-dot"></span><span>系统就绪</span></div>
-    </div>
+    <header class="page-header">
+      <div><p class="eyebrow">CREATE WITH SEEDANCE</p><h1>视频创作</h1></div>
+      <span class="system-status"><i></i>系统就绪</span>
+    </header>
+
     <el-alert v-if="!canGenerate" title="当前账号暂未获得视频生成权限，请联系管理员开通。" type="warning" :closable="false" show-icon class="access-alert" />
-    <div class="workspace-grid">
-      <main class="composer-panel">
-        <section class="section-block">
-          <div class="section-heading"><div><span class="step-number">01</span><h2>选择创作模式</h2></div><span class="section-note">决定参考素材的组合方式</span></div>
-          <div class="mode-tabs"><button v-for="mode in MODE_OPTIONS" :key="mode.value" type="button" class="mode-tab" :class="{ selected: form.mode === mode.value }" @click="changeMode(mode.value)"><span class="mode-icon">{{ modeIcon(mode.value) }}</span><span><strong>{{ mode.label }}</strong><small>{{ mode.hint }}</small></span></button></div>
-        </section>
-        <section class="section-block">
-          <div class="section-heading"><div><span class="step-number">02</span><h2>描述你想要的视频</h2></div><span class="counter">{{ form.prompt.length }} / 500</span></div>
-          <el-input v-model="form.prompt" type="textarea" :rows="6" maxlength="500" resize="none" placeholder="描述主体、动作、镜头、光线和氛围。例如：雨夜的未来城市，镜头低角度缓慢推进，霓虹倒映在积水中……" class="prompt-input" />
-          <div class="prompt-footer"><span>中文不超过 500 字，英文建议不超过 1000 词</span><el-button text size="small" @click="usePromptExample">填入示例</el-button></div>
-        </section>
-        <section class="section-block">
-          <div class="section-heading"><div><span class="step-number">03</span><h2>添加参考素材</h2></div><span class="section-note">{{ assetHint }}</span></div>
-          <div v-if="form.mode === 'draft'" class="draft-input"><el-input v-model="form.draftTaskId" placeholder="输入已生成的样片任务 ID，例如 task_xxx" /><p>样片模式只提交任务 ID，不与其他素材混用。</p></div>
-          <template v-else>
-            <div class="asset-list" v-if="form.assets.length"><div v-for="asset in form.assets" :key="asset.id" class="asset-row"><span class="asset-type">{{ asset.kind.toUpperCase() }}</span><div class="asset-details"><strong>{{ asset.label }}</strong><small>{{ asset.source.startsWith('data:') ? '本地素材' : asset.source }}</small></div><el-tag size="small" effect="plain">{{ asset.roleLabel }}</el-tag><el-button text circle :icon="Delete" @click="removeAsset(asset.id)" /></div></div>
-            <div class="asset-actions"><el-button :icon="Picture" plain @click="openFilePicker('image')">添加图片</el-button><el-button v-if="form.mode !== 'first-frame' && form.mode !== 'frames'" :icon="Headset" plain @click="openFilePicker('audio')">添加音频</el-button><el-button v-if="form.mode === 'reference'" :icon="VideoCamera" plain @click="openVideoUrl">添加视频 URL</el-button></div>
-            <input ref="imagePicker" type="file" accept="image/jpeg,image/png,image/webp,image/bmp,image/tiff,image/gif,image/heic,image/heif" hidden @change="handleFileSelected($event, 'image')" /><input ref="audioPicker" type="file" accept="audio/wav,audio/mpeg,audio/mp3" hidden @change="handleFileSelected($event, 'audio')" />
-            <p class="asset-help">图片和音频支持本地上传或 Data URL；视频请填写公网 URL 或 <code>asset://</code> 素材 ID。</p>
-          </template>
-        </section>
-        <section class="section-block">
-          <div class="section-heading"><div><span class="step-number">04</span><h2>高级参数</h2></div><span class="section-note">与 Seedance API 字段一致</span></div>
-          <div class="advanced-grid">
-            <div class="advanced-field"><label>任务优先级 <code>priority</code></label><el-slider v-model="form.priority" :min="0" :max="9" :step="1" show-input /></div>
-            <div class="advanced-field"><label>过期时间（秒） <code>execution_expires_after</code></label><el-input-number v-model="form.execution_expires_after" :min="3600" :max="259200" :step="3600" controls-position="right" /></div>
-            <div class="advanced-field full"><label>回调地址 <code>callback_url</code></label><el-input v-model="form.callback_url" placeholder="https://example.com/seedance/callback" clearable /></div>
-            <div class="advanced-field full"><label>安全标识 <code>safety_identifier</code></label><el-input v-model="form.safety_identifier" maxlength="64" show-word-limit placeholder="英文用户标识，最多 64 个字符" clearable /></div>
-            <div class="advanced-toggle"><span>返回生成视频尾帧 <code>return_last_frame</code></span><el-switch v-model="form.return_last_frame" /></div>
-            <div class="advanced-toggle"><span>联网搜索 <code>tools.web_search</code></span><el-switch v-model="form.web_search" /></div>
-          </div>
-        </section>
-        <section class="section-block summary-block">
-          <div class="section-heading"><div><span class="step-number">05</span><h2>确认并生成</h2></div><span class="section-note">提交前检查请求摘要</span></div>
-          <div class="request-summary"><span>{{ selectedModel?.label }}</span><span>{{ form.resolution }}</span><span>{{ form.ratio }}</span><span>{{ form.duration === -1 ? '智能时长' : `${form.duration} 秒` }}</span><span>{{ form.generate_audio ? '有声' : '无声' }}</span><span>{{ form.output_format.toUpperCase() }}</span></div>
-          <div v-if="formError" class="form-error"><el-icon><WarningFilled /></el-icon>{{ formError }}</div><el-button type="primary" size="large" :loading="submitting" :disabled="!canGenerate" class="generate-button" @click="submitTask"><el-icon><MagicStick /></el-icon>开始生成</el-button>
-        </section>
-      </main>
-      <aside class="inspector-panel">
-        <div class="inspector-header"><div><p class="eyebrow">PARAMETERS</p><h2>参数检查器</h2></div><el-button text :icon="Refresh" @click="resetForm" /></div>
-        <div class="inspector-section"><label>模型</label><el-select v-model="form.model" @change="syncModel" style="width:100%"><el-option v-for="model in MODEL_OPTIONS" :key="model.value" :label="model.label" :value="model.value" /></el-select></div>
-        <div v-if="form.mode === 'reference' && form.model === 'doubao-seedance-2-5'" class="inspector-section"><label>参考任务类型 <el-tooltip content="提前校验参考、编辑或延长任务的参数约束"><el-icon><InfoFilled /></el-icon></el-tooltip></label><el-select v-model="form.omni_reference_task_type" style="width:100%"><el-option label="自动判断" value="auto" /><el-option label="参考生视频" value="reference" /><el-option label="视频编辑" value="edit" /><el-option label="视频延长" value="extend" /></el-select></div>
-        <div class="inspector-section"><label>分辨率</label><div class="segmented"><button v-for="resolution in availableResolutions" :key="resolution" type="button" :class="{ active: form.resolution === resolution }" @click="form.resolution = resolution">{{ resolution }}</button></div></div>
-        <div class="inspector-section"><label>宽高比</label><el-select v-model="form.ratio" :disabled="ratioLocked" style="width:100%"><el-option v-for="ratio in ratioOptions" :key="ratio.value" :label="ratio.label" :value="ratio.value" /></el-select><small v-if="ratioLocked" class="field-note">该模式由模型根据首帧自动适配</small></div>
-        <div class="inspector-section"><label>视频时长</label><el-select v-model="form.duration" style="width:100%"><el-option v-for="option in durationOptions" :key="option.value" :label="option.label" :value="option.value" /></el-select><small class="field-note">支持智能选择或 4–{{ selectedModel?.maxDuration }} 秒</small></div>
-        <div class="inspector-section toggles"><label>输出设置</label><div class="toggle-row"><span>生成声音</span><el-switch v-model="form.generate_audio" /></div><div class="toggle-row"><span>添加 AI 水印</span><el-switch v-model="form.watermark" /></div><div class="toggle-row"><span>输出格式</span><el-radio-group v-model="form.output_format" size="small"><el-radio-button label="mp4">MP4</el-radio-button><el-radio-button label="mov" :disabled="form.model !== 'doubao-seedance-2-5'">MOV</el-radio-button></el-radio-group></div></div>
-        <div class="inspector-footnote"><el-icon><Lock /></el-icon><span>API Key 和中转站由管理员统一配置，当前账号无需设置。</span></div>
-      </aside>
-    </div>
-    <el-dialog v-model="videoDialogVisible" title="添加参考视频" width="480px"><el-form label-position="top"><el-form-item label="视频 URL 或素材 ID"><el-input v-model="videoSource" placeholder="https://.../video.mp4 或 asset://xxx" /></el-form-item></el-form><template #footer><el-button @click="videoDialogVisible = false">取消</el-button><el-button type="primary" @click="addVideoAsset">添加</el-button></template></el-dialog>
+
+    <main class="conversation-workspace">
+      <ConversationTimeline :entries="entries" />
+      <CreateComposer
+        :form="form"
+        :submitting="submitting"
+        :can-generate="canGenerate"
+        :error="formError"
+        @material-command="handleMaterialCommand"
+        @remove-asset="removeAsset"
+        @model-change="handleModelChange"
+        @submit="submitTask"
+      />
+    </main>
+
+    <input ref="imagePicker" type="file" accept="image/jpeg,image/png,image/webp,image/bmp,image/tiff,image/gif,image/heic,image/heif" hidden @change="handleFileSelected($event, 'image')" />
+    <input ref="audioPicker" type="file" accept="audio/wav,audio/mpeg,audio/mp3" hidden @change="handleFileSelected($event, 'audio')" />
+
+    <el-dialog v-model="videoDialogVisible" title="添加参考视频" width="min(460px, calc(100vw - 28px))">
+      <el-form label-position="top" @submit.prevent>
+        <el-form-item label="视频 URL 或素材 ID">
+          <el-input v-model="videoSource" placeholder="https://.../video.mp4 或 asset://xxx" @keyup.enter="addVideoAsset" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="videoDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="addVideoAsset">添加</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Delete, Headset, InfoFilled, Lock, MagicStick, Picture, Refresh, VideoCamera, WarningFilled } from '@element-plus/icons-vue'
 import { tasksApi } from '@/api/tasks'
+import ConversationTimeline, { type ConversationEntry } from '@/components/create/ConversationTimeline.vue'
+import CreateComposer from '@/components/create/CreateComposer.vue'
+import {
+  buildTaskRequest,
+  createDefaultForm,
+  exceedsDataUrlLimit,
+  fileToDataUrl,
+  MODEL_OPTIONS,
+  normalizeModelSettings,
+  referenceRoleForKind,
+  validateCreateForm,
+  type AssetInput,
+} from '@/features/create/seedance'
 import { useAuthStore } from '@/stores/auth'
-import { buildTaskRequest, createDefaultForm, exceedsDataUrlLimit, fileRoleForMode, fileToDataUrl, MODE_OPTIONS, MODEL_OPTIONS, type AssetInput, type CreateMode } from '@/features/create/seedance'
 
-const authStore = useAuthStore(); const form = reactive(createDefaultForm()); const submitting = ref(false); const formError = ref(''); const imagePicker = ref<HTMLInputElement>(); const audioPicker = ref<HTMLInputElement>(); const videoDialogVisible = ref(false); const videoSource = ref('')
-const canGenerate = computed(() => authStore.isAdmin() || authStore.user?.canGenerate !== false); const selectedModel = computed(() => MODEL_OPTIONS.find((model) => model.value === form.model)); const availableResolutions = computed(() => selectedModel.value?.resolutions || ['480p', '720p']); const ratioLocked = computed(() => ((form.mode === 'first-frame' || form.mode === 'frames') && form.model === 'doubao-seedance-2-5') || form.omni_reference_task_type === 'edit' || form.omni_reference_task_type === 'extend'); const ratioOptions = [{ value: 'adaptive', label: '自适应' }, { value: '16:9', label: '16:9 横屏' }, { value: '9:16', label: '9:16 竖屏' }, { value: '1:1', label: '1:1 方形' }, { value: '4:3', label: '4:3' }, { value: '3:4', label: '3:4' }, { value: '21:9', label: '21:9 超宽' }]; const durationOptions = computed(() => [{ value: -1, label: '智能选择' }, ...Array.from({ length: (selectedModel.value?.maxDuration || 15) - 3 }, (_, index) => ({ value: index + 4, label: `${index + 4} 秒` }))]); const assetHint = computed(() => form.mode === 'text' ? '可选，文生视频无需素材' : form.mode === 'first-frame' ? '需要 1 张图片' : form.mode === 'frames' ? '需要 2 张图片' : form.mode === 'reference' ? '可组合图片、视频和音频' : '输入样片任务 ID')
-const modeIcon = (mode: CreateMode) => ({ text: 'T', 'first-frame': '↗', frames: '⇄', reference: '◈', draft: 'D' }[mode]); const changeMode = (mode: CreateMode) => { form.mode = mode; form.assets = []; form.draftTaskId = ''; if (mode === 'first-frame' || mode === 'frames') form.ratio = 'adaptive' }; const syncModel = () => { if (!availableResolutions.value.includes(form.resolution)) form.resolution = availableResolutions.value[1] || availableResolutions.value[0]; if (form.model !== 'doubao-seedance-2-5' && form.output_format === 'mov') form.output_format = 'mp4'; if (form.duration !== -1 && form.duration > (selectedModel.value?.maxDuration || 15)) form.duration = -1 }; const resetForm = () => Object.assign(form, createDefaultForm()); const usePromptExample = () => { form.prompt = '雨夜的未来城市，低机位镜头缓慢推进，霓虹倒映在积水中，远处车辆穿过薄雾，电影级光影，细腻的环境音。' }
-const handleFileSelected = async (event: Event, kind: 'image' | 'audio') => { const file = (event.target as HTMLInputElement).files?.[0]; if (!file) return; try { if (file.size > 30 * 1024 * 1024) throw new Error('单个本地素材不能超过 30 MB'); const source = await fileToDataUrl(file); const imageCount = form.assets.filter((asset) => asset.kind === 'image').length; if (form.mode === 'first-frame' && imageCount >= 1) throw new Error('首帧模式只需要 1 张图片'); if (form.mode === 'frames' && imageCount >= 2) throw new Error('首尾帧模式只需要 2 张图片'); const role = fileRoleForMode(form.mode, kind, imageCount); const nextAsset = { id: `${kind}-${Date.now()}`, kind, source, label: file.name, role, roleLabel: roleLabel(role) } as AssetInput & { roleLabel: string }; if (exceedsDataUrlLimit([...form.assets, nextAsset])) throw new Error('本地素材总大小过大，请减少素材数量或改用 asset:// 素材 ID'); form.assets.push(nextAsset) } catch (error: any) { ElMessage.error(error.message || '读取素材失败') } finally { (event.target as HTMLInputElement).value = '' } }
-const openFilePicker = (kind: 'image' | 'audio') => (kind === 'image' ? imagePicker.value : audioPicker.value)?.click(); const roleLabel = (role?: AssetInput['role']) => ({ first_frame: '首帧', last_frame: '尾帧', reference_image: '参考图片', reference_video: '参考视频', reference_audio: '参考音频' }[role || ''] || '素材'); const removeAsset = (id: string) => { form.assets = form.assets.filter((asset) => asset.id !== id) }; const openVideoUrl = () => { videoSource.value = ''; videoDialogVisible.value = true }; const addVideoAsset = () => { const source = videoSource.value.trim(); if (!/^(https?:\/\/|asset:\/\/)/i.test(source)) { ElMessage.error('视频必须使用 HTTP(S) URL 或 asset:// 素材 ID'); return } form.assets.push({ id: `video-${Date.now()}`, kind: 'video', source, label: source, role: 'reference_video', roleLabel: '参考视频' } as AssetInput & { roleLabel: string }); videoDialogVisible.value = false }
-const validateForm = () => { if (exceedsDataUrlLimit(form.assets)) return '本地素材总大小过大，请减少素材数量或改用 asset:// 素材 ID'; if (!form.prompt.trim() && form.mode === 'text') return '请先输入视频提示词'; if (form.mode === 'first-frame' && form.assets.filter((asset) => asset.role === 'first_frame').length !== 1) return '首帧模式需要 1 张首帧图片'; if (form.mode === 'frames' && form.assets.filter((asset) => asset.role === 'first_frame').length !== 1) return '首尾帧模式需要首帧图片'; if (form.mode === 'frames' && form.assets.filter((asset) => asset.role === 'last_frame').length !== 1) return '首尾帧模式需要尾帧图片'; if (form.mode === 'draft' && !form.draftTaskId.trim()) return '请输入样片任务 ID'; if (form.mode === 'reference' && form.assets.length === 0) return '全模态参考模式至少需要一项参考素材'; if (form.mode === 'reference' && form.model !== 'doubao-seedance-2-5' && form.assets.some((asset) => asset.kind === 'audio') && !form.assets.some((asset) => asset.kind === 'image' || asset.kind === 'video')) return 'Seedance 2.0 不能仅使用音频'; if (form.callback_url.trim() && !/^https?:\/\//i.test(form.callback_url.trim())) return '回调地址必须使用 HTTP(S) URL'; if (form.safety_identifier && (!/^[\x20-\x7E]+$/.test(form.safety_identifier) || form.safety_identifier.length > 64)) return '安全标识必须是不超过 64 个字符的英文字符串'; return '' }
-const submitTask = async () => { formError.value = validateForm(); if (formError.value || !canGenerate.value) return; submitting.value = true; try { await tasksApi.createTask(buildTaskRequest(form)); ElMessage.success('任务已创建，正在进入队列'); resetForm() } catch (error: any) { formError.value = error.response?.data?.error || error.message || '创建任务失败' } finally { submitting.value = false } }
+const authStore = useAuthStore()
+const form = reactive(createDefaultForm())
+const entries = ref<ConversationEntry[]>([])
+const submitting = ref(false)
+const formError = ref('')
+const imagePicker = ref<HTMLInputElement>()
+const audioPicker = ref<HTMLInputElement>()
+const videoDialogVisible = ref(false)
+const videoSource = ref('')
+const canGenerate = computed(() => authStore.isAdmin() || authStore.user?.canGenerate !== false)
+
+const handleModelChange = () => {
+  normalizeModelSettings(form)
+  formError.value = ''
+}
+
+const handleMaterialCommand = (command: 'image' | 'audio' | 'video') => {
+  formError.value = ''
+  if (command === 'image') imagePicker.value?.click()
+  else if (command === 'audio') audioPicker.value?.click()
+  else {
+    videoSource.value = ''
+    videoDialogVisible.value = true
+  }
+}
+
+const handleFileSelected = async (event: Event, kind: 'image' | 'audio') => {
+  const target = event.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) return
+  try {
+    if (file.size > 30 * 1024 * 1024) throw new Error('单个本地素材不能超过 30 MB')
+    const source = await fileToDataUrl(file)
+    const nextAsset: AssetInput = { id: `${kind}-${Date.now()}`, kind, source, label: file.name, role: referenceRoleForKind(kind) }
+    if (exceedsDataUrlLimit([...form.assets, nextAsset])) throw new Error('本地素材总大小过大，请减少素材数量或改用 asset:// 素材 ID')
+    form.assets.push(nextAsset)
+    formError.value = ''
+  } catch (error: any) {
+    ElMessage.error(error.message || '读取素材失败')
+  } finally {
+    target.value = ''
+  }
+}
+
+const addVideoAsset = () => {
+  const source = videoSource.value.trim()
+  if (!/^(https?:\/\/|asset:\/\/)/i.test(source)) {
+    ElMessage.error('视频必须使用 HTTP(S) URL 或 asset:// 素材 ID')
+    return
+  }
+  form.assets.push({ id: `video-${Date.now()}`, kind: 'video', source, label: source, role: referenceRoleForKind('video') })
+  formError.value = ''
+  videoDialogVisible.value = false
+}
+
+const removeAsset = (id: string) => {
+  form.assets = form.assets.filter((asset) => asset.id !== id)
+  formError.value = ''
+}
+
+const buildParameterSummary = () => {
+  const model = MODEL_OPTIONS.find((item) => item.value === form.model)
+  return [
+    model?.label ?? form.model,
+    form.resolution.toUpperCase(),
+    form.ratio === 'adaptive' ? '自适应比例' : form.ratio,
+    form.duration === -1 ? '智能时长' : `${form.duration} 秒`,
+    form.generate_audio ? '有声' : '无声',
+    form.watermark ? 'AI 水印' : '无水印',
+    form.output_format.toUpperCase(),
+  ]
+}
+
+const clearComposerContent = () => {
+  form.prompt = ''
+  form.assets = []
+}
+
+const submitTask = async () => {
+  if (submitting.value) return
+  formError.value = validateCreateForm(form)
+  if (formError.value || !canGenerate.value) return
+
+  const request = buildTaskRequest({ ...form, assets: [...form.assets] })
+  entries.value.push({
+    id: `user-${Date.now()}`,
+    role: 'user',
+    prompt: form.prompt.trim(),
+    materials: form.assets.map(({ kind, label }) => ({ kind, label })),
+    parameterSummary: buildParameterSummary(),
+  })
+  submitting.value = true
+  try {
+    const response = await tasksApi.createTask(request)
+    entries.value.push({ id: `assistant-${response.data.task.id}`, role: 'assistant', status: 'queued', taskId: response.data.task.id, message: '任务已进入生成队列' })
+    clearComposerContent()
+    formError.value = ''
+  } catch (error: any) {
+    formError.value = error.response?.data?.error || error.message || '创建任务失败'
+    entries.value.push({ id: `assistant-error-${Date.now()}`, role: 'assistant', status: 'failed', message: formError.value })
+  } finally {
+    submitting.value = false
+  }
+}
 </script>
 
 <style scoped>
-.create-page{max-width:1440px;margin:0 auto}.page-header{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:24px}.eyebrow{margin:0 0 8px;color:var(--accent-primary);font-size:11px;font-weight:700;letter-spacing:.14em}.page-title{margin:0;color:var(--text-primary);font-size:34px;line-height:1.12;font-weight:750}.page-subtitle{margin:9px 0 0;color:var(--text-secondary);font-size:14px}.header-meta{display:flex;align-items:center;gap:8px;color:var(--text-secondary);font-size:12px}.live-dot{width:7px;height:7px;background:var(--success);border-radius:50%;box-shadow:0 0 0 4px var(--success-light)}.access-alert{margin-bottom:18px}.workspace-grid{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:18px;align-items:start}.composer-panel,.inspector-panel{background:var(--bg-secondary);border:1px solid var(--border-default);border-radius:8px}.section-block{padding:22px 24px;border-bottom:1px solid var(--border-subtle)}.section-block:last-child{border-bottom:0}.section-heading{display:flex;align-items:center;justify-content:space-between;gap:15px;margin-bottom:16px}.section-heading>div{display:flex;align-items:center;gap:10px}.step-number{color:var(--accent-primary);font:700 11px var(--font-mono)}h2{margin:0;color:var(--text-primary);font-size:16px}.section-note,.counter{color:var(--text-muted);font-size:12px}.mode-tabs{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px}.mode-tab{display:flex;align-items:flex-start;gap:10px;min-height:66px;padding:13px 12px;text-align:left;border:1px solid var(--border-default);background:var(--bg-elevated);color:var(--text-secondary);border-radius:6px;cursor:pointer;transition:.18s}.mode-tab:hover{border-color:var(--border-emphasis);color:var(--text-primary)}.mode-tab.selected{border-color:var(--accent-primary);background:var(--accent-light);color:var(--text-primary)}.mode-icon{display:grid;place-items:center;flex:0 0 24px;width:24px;height:24px;border:1px solid currentColor;border-radius:5px;color:var(--accent-primary);font-size:11px;font-weight:700}.mode-tab strong,.mode-tab small{display:block}.mode-tab strong{font-size:12px}.mode-tab small{margin-top:4px;color:var(--text-muted);font-size:10px;line-height:1.35}.prompt-input :deep(.el-textarea__inner){padding:14px;background:var(--bg-elevated);border:1px solid var(--border-default);box-shadow:none;color:var(--text-primary);font-size:14px;line-height:1.65}.prompt-input :deep(.el-textarea__inner:focus){border-color:var(--accent-primary);box-shadow:0 0 0 2px var(--accent-light)}.prompt-footer{display:flex;justify-content:space-between;align-items:center;margin-top:8px;color:var(--text-muted);font-size:11px}.asset-list{display:grid;gap:8px;margin-bottom:12px}.asset-row{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:6px}.asset-type{font:700 9px var(--font-mono);color:var(--accent-primary)}.asset-details{min-width:0;flex:1}.asset-details strong,.asset-details small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.asset-details strong{color:var(--text-primary);font-size:12px}.asset-details small{margin-top:4px;color:var(--text-muted);font-size:10px}.asset-actions{display:flex;flex-wrap:wrap;gap:8px}.asset-help,.draft-input p{margin:10px 0 0;color:var(--text-muted);font-size:11px;line-height:1.5}.draft-input :deep(.el-input__wrapper){background:var(--bg-elevated)}code{color:var(--accent-primary)}.advanced-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.advanced-field,.advanced-toggle{min-width:0;padding:13px 14px;border:1px solid var(--border-subtle);background:var(--bg-elevated);border-radius:6px}.advanced-field.full{grid-column:1/-1}.advanced-field label{display:flex;justify-content:space-between;gap:10px;margin-bottom:9px;color:var(--text-secondary);font-size:12px;font-weight:600}.advanced-field :deep(.el-input-number){width:100%}.advanced-toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--text-secondary);font-size:12px}.request-summary{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px}.request-summary span{padding:5px 8px;border:1px solid var(--border-default);border-radius:4px;color:var(--text-secondary);font:10px var(--font-mono)}.form-error{display:flex;align-items:center;gap:7px;margin-bottom:12px;padding:9px 11px;color:var(--error);background:var(--error-light);border:1px solid rgba(239,68,68,.24);border-radius:5px;font-size:12px}.generate-button{width:100%;height:44px}.inspector-panel{position:sticky;top:18px;padding:20px}.inspector-header{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:16px;border-bottom:1px solid var(--border-subtle)}.inspector-header h2{font-size:18px}.inspector-section{padding:16px 0;border-bottom:1px solid var(--border-subtle)}.inspector-section label{display:flex;align-items:center;gap:6px;margin-bottom:9px;color:var(--text-secondary);font-size:12px;font-weight:600}.value-label{margin-left:auto;color:var(--accent-primary);font-weight:500}.segmented{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}.segmented button{height:30px;border:1px solid var(--border-default);background:var(--bg-elevated);color:var(--text-secondary);border-radius:4px;cursor:pointer;font-size:11px}.segmented button.active{border-color:var(--accent-primary);background:var(--accent-light);color:var(--text-primary)}.field-note,.slider-labels{display:flex;justify-content:space-between;margin-top:7px;color:var(--text-muted);font-size:10px}.toggle-row{display:flex;align-items:center;justify-content:space-between;min-height:34px;color:var(--text-secondary);font-size:12px}.inspector-footnote{display:flex;align-items:flex-start;gap:7px;margin-top:17px;color:var(--text-muted);font-size:11px;line-height:1.5}.inspector-footnote .el-icon{color:var(--accent-primary);margin-top:1px}
-@media(max-width:1100px){.workspace-grid{grid-template-columns:1fr}.inspector-panel{position:static}}@media(max-width:640px){.page-header{align-items:flex-start;gap:15px;flex-direction:column}.page-title{font-size:28px}.section-block{padding:18px 16px}.mode-tabs,.advanced-grid{grid-template-columns:1fr}.advanced-field.full{grid-column:auto}.mode-tab{padding:11px 10px}.mode-tab small{font-size:10px}.segmented{grid-template-columns:repeat(2,1fr)}.prompt-footer{align-items:flex-start;gap:8px;flex-direction:column}.asset-actions :deep(.el-button){flex:1}.asset-row :deep(.el-tag){display:none}}
+.create-page{display:flex;width:min(1120px,100%);min-height:calc(100vh - 128px);margin:0 auto;flex-direction:column}.page-header{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;padding:2px 2px 14px;border-bottom:1px solid var(--border-subtle)}.eyebrow{margin:0 0 6px;color:var(--accent-primary);font-size:10px;font-weight:700;letter-spacing:.12em}.page-header h1{margin:0;color:var(--text-primary);font-size:24px;font-weight:720;line-height:1.2;letter-spacing:0}.system-status{display:flex;align-items:center;gap:7px;padding-bottom:3px;color:var(--text-muted);font-size:11px}.system-status i{width:6px;height:6px;border-radius:50%;background:var(--success);box-shadow:0 0 0 4px var(--success-light)}.access-alert{margin-top:14px}.conversation-workspace{display:flex;flex:1 1 auto;min-height:0;flex-direction:column}@media(max-width:720px){.create-page{min-height:calc(100vh - 138px)}.page-header{padding-top:0}.page-header h1{font-size:21px}.system-status{padding-bottom:1px}}
 </style>
