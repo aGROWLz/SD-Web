@@ -70,7 +70,7 @@ export const buildTaskRequest = (form: CreateFormState) => {
     watermark: form.watermark,
     output_format: form.output_format,
   }
-  if (form.model === 'doubao-seedance-2-5') params.omni_reference_task_type = 'auto'
+  if (form.model === 'doubao-seedance-2-5' && form.assets.length > 0) params.omni_reference_task_type = 'auto'
   return { prompt, params }
 }
 

@@ -44,6 +44,12 @@ describe('referenceRoleForKind', () => {
 })
 
 describe('buildTaskRequest', () => {
+  it('omits the omni task type for a prompt-only 2.5 request', () => {
+    const request = buildTaskRequest(createForm({ prompt: 'A calm ocean' }))
+
+    expect(request.params).not.toHaveProperty('omni_reference_task_type')
+  })
+
   it('builds 2.5 reference content with text first and only supported params', () => {
     const form = createForm({
       prompt: '  camera moves forward  ',
