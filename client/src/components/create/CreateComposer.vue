@@ -33,18 +33,18 @@
     </div>
 
     <div class="composer-toolbar">
-      <el-dropdown trigger="click" placement="top-start" :disabled="submitting" @command="handleMaterialCommand">
-        <el-tooltip content="添加参考素材">
-          <el-button class="add-button" circle :icon="Plus" :disabled="submitting" aria-label="添加参考素材" />
-        </el-tooltip>
-        <template #dropdown>
-          <el-dropdown-menu>
-            <el-dropdown-item command="image" :icon="Picture">添加图片</el-dropdown-item>
-            <el-dropdown-item command="audio" :icon="Headset">添加音频</el-dropdown-item>
-            <el-dropdown-item command="video" :icon="VideoCamera">添加视频 URL</el-dropdown-item>
-          </el-dropdown-menu>
+      <el-popover v-model:visible="materialMenuVisible" placement="top-start" :width="180" trigger="click">
+        <div class="material-menu" role="menu">
+          <button type="button" role="menuitem" @click="chooseMaterial('image')"><el-icon><Picture /></el-icon><span>添加图片</span></button>
+          <button type="button" role="menuitem" @click="chooseMaterial('audio')"><el-icon><Headset /></el-icon><span>添加音频</span></button>
+          <button type="button" role="menuitem" @click="chooseMaterial('video')"><el-icon><VideoCamera /></el-icon><span>添加视频 URL</span></button>
+        </div>
+        <template #reference>
+          <el-tooltip content="添加参考素材">
+            <el-button class="add-button" circle :icon="Plus" :disabled="submitting" aria-label="添加参考素材" />
+          </el-tooltip>
         </template>
-      </el-dropdown>
+      </el-popover>
 
       <ParameterBar :form="form" :disabled="submitting" @model-change="emit('model-change')" />
 
@@ -65,6 +65,7 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import { Close, Headset, Picture, Plus, Promotion, VideoCamera, WarningFilled } from '@element-plus/icons-vue'
 import ParameterBar from './ParameterBar.vue'
 import type { AssetInput, CreateFormState } from '@/features/create/seedance'
@@ -83,8 +84,11 @@ const emit = defineEmits<{
   submit: []
 }>()
 
-const handleMaterialCommand = (command: string | number | object) => {
-  if (command === 'image' || command === 'audio' || command === 'video') emit('material-command', command)
+const materialMenuVisible = ref(false)
+
+const chooseMaterial = (command: 'image' | 'audio' | 'video') => {
+  materialMenuVisible.value = false
+  emit('material-command', command)
 }
 
 const materialIcon = (kind: AssetInput['kind']) => ({ image: Picture, audio: Headset, video: VideoCamera }[kind])
@@ -211,6 +215,8 @@ const materialLabel = (kind: AssetInput['kind']) => ({ image: '参考图片', au
   width: 38px;
   height: 38px;
 }
+
+.material-menu { display:grid; gap:3px; }.material-menu button { display:flex; width:100%; align-items:center; gap:9px; padding:9px 10px; border:0; border-radius:4px; color:var(--text-secondary); background:transparent; cursor:pointer; text-align:left; font-size:12px; }.material-menu button:hover { color:var(--text-primary); background:var(--accent-light); }.material-menu .el-icon { color:var(--accent-primary); }
 
 .add-button {
   border-color: var(--border-default);

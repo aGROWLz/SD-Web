@@ -45,6 +45,12 @@ export interface RelayStationData {
   isPrimary?: boolean
 }
 
+export interface StorageConfig {
+  workerUrl: string
+  configured: boolean
+  keyMasked: string
+}
+
 export const adminApi = {
   // 用户管理
   getAllUsers(params?: { page?: number; limit?: number }) {
@@ -78,4 +84,11 @@ export const adminApi = {
     return client.delete(`/admin/relay-stations/${id}`)
   },
 
+  getStorageConfig() {
+    return client.get<{ storage: StorageConfig }>('/admin/storage')
+  },
+
+  updateStorageConfig(data: { workerUrl: string; keyValue?: string; clearKey?: boolean }) {
+    return client.put<{ storage: StorageConfig }>('/admin/storage', data)
+  },
 }

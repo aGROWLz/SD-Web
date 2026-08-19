@@ -24,6 +24,19 @@
       <div class="summary-item"><span>当前主站</span><strong class="primary-value">{{ primaryStation?.name || '未设置' }}</strong></div>
     </div>
 
+    <section class="storage-panel">
+      <div class="storage-heading">
+        <div><p class="eyebrow">ASSET STORAGE</p><h2>R2 素材存储</h2><p>本地图片、音频和视频只在点击生成时上传到公网。</p></div>
+        <el-tag :type="storage.configured ? 'success' : 'warning'">{{ storage.configured ? '已配置' : '未配置' }}</el-tag>
+      </div>
+      <el-form label-position="top" class="storage-form">
+        <el-form-item label="WORKER_URL"><el-input v-model="storageForm.workerUrl" placeholder="https://your-worker.example.com" /></el-form-item>
+        <el-form-item label="Key"><el-input v-model="storageForm.keyValue" type="password" show-password :placeholder="storage.keyMasked ? `已配置：${storage.keyMasked}，留空保持不变` : '输入 R2 Worker key'" /></el-form-item>
+        <div class="storage-actions"><el-button type="primary" :loading="storageSaving" @click="saveStorage">保存配置</el-button><el-button :disabled="!storage.keyMasked || storageSaving" @click="clearStorageKey">清除 Key</el-button></div>
+      </el-form>
+      <p class="storage-hint">未配置 R2 时，只有图片素材允许回退为 Base64；音频和视频素材需要先完成配置。</p>
+    </section>
+
     <div class="table-shell" v-loading="loading">
       <el-table :data="stations" row-key="id">
         <el-table-column label="站点" min-width="190">
@@ -74,7 +87,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import { adminApi, type RelayStation } from '@/api/admin'
+import { adminApi, type RelayStation, type StorageConfig } from '@/api/admin'
 import { relayKeyRules } from '@/features/admin/relay-station'
 
 const stations = ref<RelayStation[]>([])
@@ -84,6 +97,9 @@ const dialogVisible = ref(false)
 const editing = ref<RelayStation | null>(null)
 const formRef = ref<FormInstance>()
 const form = reactive({ name: '', baseUrl: '', keyValue: '', isPrimary: false })
+const storage = reactive<StorageConfig>({ workerUrl: '', configured: false, keyMasked: '' })
+const storageForm = reactive({ workerUrl: '', keyValue: '' })
+const storageSaving = ref(false)
 const rules = computed<FormRules>(() => ({
   name: [{ required: true, message: '请输入站点名称', trigger: 'blur' }],
   baseUrl: [{ required: true, message: '请输入 Base URL', trigger: 'blur' }],
@@ -98,6 +114,35 @@ const fetchStations = async () => {
   try { stations.value = (await adminApi.getRelayStations()).data.stations }
   catch (error: any) { ElMessage.error(error.response?.data?.error || '获取中转站失败') }
   finally { loading.value = false }
+}
+
+const fetchStorage = async () => {
+  try {
+    const result = (await adminApi.getStorageConfig()).data.storage
+    Object.assign(storage, result)
+    storageForm.workerUrl = result.workerUrl
+    storageForm.keyValue = ''
+  } catch (error: any) { ElMessage.error(error.response?.data?.error || '获取 R2 配置失败') }
+}
+
+const saveStorage = async () => {
+  storageSaving.value = true
+  try {
+    const result = (await adminApi.updateStorageConfig({ workerUrl: storageForm.workerUrl, keyValue: storageForm.keyValue || undefined })).data.storage
+    Object.assign(storage, result); storageForm.keyValue = ''
+    ElMessage.success('R2 配置已保存')
+  } catch (error: any) { ElMessage.error(error.response?.data?.error || '保存 R2 配置失败') }
+  finally { storageSaving.value = false }
+}
+
+const clearStorageKey = async () => {
+  storageSaving.value = true
+  try {
+    const result = (await adminApi.updateStorageConfig({ workerUrl: storageForm.workerUrl, clearKey: true })).data.storage
+    Object.assign(storage, result); storageForm.keyValue = ''
+    ElMessage.success('R2 Key 已清除')
+  } catch (error: any) { ElMessage.error(error.response?.data?.error || '清除 R2 Key 失败') }
+  finally { storageSaving.value = false }
 }
 
 const resetForm = () => { form.name = ''; form.baseUrl = ''; form.keyValue = ''; form.isPrimary = false }
@@ -131,7 +176,7 @@ const removeStation = async (station: RelayStation) => {
 }
 
 const formatDate = (date: string) => new Date(date).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit', year: 'numeric' })
-onMounted(fetchStations)
+onMounted(() => { fetchStations(); fetchStorage() })
 </script>
 
 <style scoped>
@@ -145,6 +190,8 @@ onMounted(fetchStations)
 .summary-item { padding:16px 18px; border:1px solid var(--border-default); background:var(--bg-secondary); border-radius:8px; }
 .summary-item span { display:block; color:var(--text-muted); font-size:12px; margin-bottom:7px; }.summary-item strong{font-size:24px;color:var(--text-primary)}.summary-item .primary-value{font-size:16px;color:var(--accent-primary)}
 .table-shell { padding:4px 0 14px; border:1px solid var(--border-default); background:var(--bg-secondary); border-radius:8px; overflow:hidden; }
+.storage-panel { margin-bottom:16px; padding:20px; border:1px solid var(--border-default); background:var(--bg-secondary); border-radius:8px; }
+.storage-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:14px; }.storage-heading h2{margin:0;color:var(--text-primary);font-size:18px}.storage-heading p:not(.eyebrow){margin:6px 0 0;color:var(--text-muted);font-size:12px}.storage-form{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) auto;align-items:end;gap:12px}.storage-form :deep(.el-form-item){margin-bottom:0}.storage-actions{display:flex;gap:8px;padding-bottom:1px;white-space:nowrap}.storage-hint{margin:14px 0 0;color:var(--text-muted);font-size:11px;line-height:1.5}
 .station-name { display:flex; align-items:center; gap:8px; color:var(--text-primary); font-weight:600; }.station-url{display:block;margin:5px 0 0 16px;color:var(--text-muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.status-dot{width:7px;height:7px;border-radius:50%;background:var(--text-muted)}.status-dot.active{background:var(--success);box-shadow:0 0 0 3px var(--success-light)}code{color:var(--text-secondary);font-size:12px}.form-hint{margin:-4px 0 18px;color:var(--text-muted);font-size:12px;line-height:1.5}
-@media(max-width:700px){.page-header{align-items:flex-start;flex-direction:column}.summary-grid{grid-template-columns:1fr}.table-shell{overflow:auto}.table-shell :deep(.el-table){min-width:850px}}
+@media(max-width:700px){.page-header{align-items:flex-start;flex-direction:column}.summary-grid{grid-template-columns:1fr}.storage-form{grid-template-columns:1fr}.storage-actions{padding-top:4px}.table-shell{overflow:auto}.table-shell :deep(.el-table){min-width:850px}}
 </style>

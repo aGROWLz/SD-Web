@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import {
   getAllUsers,
+  getStorageConfig,
+  updateStorageConfig,
   updateGenerationAccess,
 } from '../controllers/admin.controller';
 import { authenticate } from '../middleware/auth';
@@ -15,5 +17,7 @@ router.use(requireRole(UserRole.ADMIN));
 
 router.get('/users', getAllUsers);
 router.patch('/users/:id/generation-access', validateParamId('id'), validateGenerationAccess, updateGenerationAccess);
+router.get('/storage', getStorageConfig);
+router.put('/storage', updateStorageConfig);
 
 export default router;

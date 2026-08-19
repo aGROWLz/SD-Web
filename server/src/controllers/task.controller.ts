@@ -7,6 +7,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { config } from '../config/env';
 import { normalizeSeedanceRequest } from '../domain/seedance';
+import { getR2StorageConfig, prepareSeedanceParams, uploadDataUrlToR2 } from '../services/r2-storage.service';
 
 // 每日配额限制
 const DAILY_QUOTA: Record<string, number> = {
@@ -87,7 +88,12 @@ export const createTask = async (req: AuthRequest, res: Response) => {
 
     let normalizedParams;
     try {
-      normalizedParams = normalizeSeedanceRequest(prompt ?? '', params);
+      const storage = await getR2StorageConfig();
+      const preparedParams = await prepareSeedanceParams(params, {
+        configured: storage.configured,
+        upload: (source, filename) => uploadDataUrlToR2(source, filename),
+      });
+      normalizedParams = normalizeSeedanceRequest(prompt ?? '', preparedParams);
     } catch (error: any) {
       return res.status(400).json({ error: error.message });
     }
