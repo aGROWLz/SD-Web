@@ -113,10 +113,42 @@ export const MODEL_CAPABILITIES: Record<SeedanceModel, ModelCapability> = {
 
 const ensureMediaUrl = (url: string | undefined): string => {
   const value = url?.trim();
-  if (!value || !/^(https?:\/\/|asset:\/\/|data:(image|audio)\/)/i.test(value)) {
-    throw new Error('素材必须使用 HTTP(S)、asset:// 或受支持的 Data URL');
+  if (!value) throw new Error('素材 URL 无效');
+
+  if (/^https?:\/\//i.test(value)) {
+    try {
+      const parsed = new URL(value);
+      if (!parsed.hostname) throw new Error();
+      return value;
+    } catch {
+      throw new Error('素材 URL 无效');
+    }
   }
-  return value;
+
+  if (/^asset:\/\//i.test(value)) {
+    if (!/^asset:\/\/[A-Za-z0-9][A-Za-z0-9._-]*$/i.test(value)) {
+      throw new Error('素材 URL 无效');
+    }
+    return value;
+  }
+
+  if (/^data:/i.test(value)) {
+    if (!/^data:(image|audio)\/[A-Za-z0-9.+-]+;base64,[A-Za-z0-9+/]+={0,2}$/i.test(value)) {
+      throw new Error('素材 URL 无效');
+    }
+    return value;
+  }
+
+  throw new Error('素材必须使用 HTTP(S)、asset:// 或受支持的 Data URL');
+};
+
+const ensureRole = (
+  role: SeedanceRole | undefined,
+  allowed: readonly (SeedanceRole | undefined)[],
+  message: string,
+): SeedanceRole | undefined => {
+  if (!allowed.includes(role)) throw new Error(message);
+  return role;
 };
 
 const MODELS = Object.keys(MODEL_CAPABILITIES) as SeedanceModel[];
@@ -176,10 +208,11 @@ const normalizeContent = (prompt: string, content: SeedanceContent[]): SeedanceC
     }
 
     if (item.type === 'image_url') {
+      const role = ensureRole(item.role, [undefined, 'first_frame', 'last_frame', 'reference_image'], '图片角色无效');
       normalized.push({
         type: 'image_url',
         image_url: { url: ensureMediaUrl(item.image_url?.url) },
-        role: item.role,
+        ...(role ? { role } : {}),
       });
       continue;
     }
@@ -187,11 +220,13 @@ const normalizeContent = (prompt: string, content: SeedanceContent[]): SeedanceC
     if (item.type === 'video_url') {
       const url = ensureMediaUrl(item.video_url?.url);
       if (url.startsWith('data:')) throw new Error('视频仅支持 HTTP(S) URL 或 asset:// 素材 ID');
+      ensureRole(item.role, [undefined, 'reference_video'], '视频角色无效');
       normalized.push({ type: 'video_url', video_url: { url }, role: 'reference_video' });
       continue;
     }
 
     if (item.type === 'audio_url') {
+      ensureRole(item.role, [undefined, 'reference_audio'], '音频角色无效');
       normalized.push({
         type: 'audio_url',
         audio_url: { url: ensureMediaUrl(item.audio_url?.url) },
@@ -238,6 +273,9 @@ export const normalizeSeedanceRequest = (
   const videos = content.filter((item) => item.type === 'video_url');
   const audios = content.filter((item) => item.type === 'audio_url');
   if (images.length > capability.maxImages) throw new Error(`该模型最多支持 ${capability.maxImages} 张图片`);
+  if (images.length > 1 && images.some((item) => !item.role)) {
+    throw new Error('多图片任务必须声明图片角色');
+  }
   if (videos.length > capability.maxVideos) throw new Error(`该模型最多支持 ${capability.maxVideos} 个视频`);
   if (audios.length > capability.maxAudios) throw new Error(`该模型最多支持 ${capability.maxAudios} 个音频`);
 

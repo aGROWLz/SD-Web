@@ -143,4 +143,21 @@ describe('normalizeSeedanceRequest', () => {
     })).toThrow('不支持的素材类型');
   });
 
+  it('rejects invalid image roles and empty material URLs', () => {
+    expect(() => normalizeSeedanceRequest('', {
+      content: [{
+        type: 'image_url',
+        image_url: { url: 'https://example.com/image.png' },
+        role: 'invalid_role',
+      } as any],
+    })).toThrow('图片角色无效');
+
+    expect(() => normalizeSeedanceRequest('', {
+      content: [{
+        type: 'image_url',
+        image_url: { url: 'https://' },
+      }],
+    })).toThrow('素材 URL 无效');
+  });
+
 });
