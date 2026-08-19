@@ -20,7 +20,7 @@
           </div>
           <el-dropdown @command="handleCommand" trigger="click">
             <span class="user-info">
-              <el-avatar :size="32" style="background: linear-gradient(135deg, var(--accent-primary), #8B5CF6)">
+              <el-avatar :size="32" style="background: var(--accent-primary)">
                 <el-icon><User /></el-icon>
               </el-avatar>
               <span class="user-email">{{ authStore.user?.email }}</span>
@@ -45,7 +45,7 @@
       </div>
     </el-header>
 
-    <el-container>
+    <el-container class="body-container">
       <el-aside width="240px" class="sidebar">
         <el-menu
           :default-active="activeMenu"
@@ -62,7 +62,7 @@
             <span>仪表盘</span>
           </el-menu-item>
 
-          <el-menu-item index="/keys">
+          <el-menu-item index="/tasks">
             <el-icon><VideoCamera /></el-icon>
             <span>视频任务</span>
           </el-menu-item>
@@ -151,7 +151,7 @@ const handleCommand = (command: string) => {
 .logo-icon {
   width: 36px;
   height: 36px;
-  background: linear-gradient(135deg, var(--accent-primary), #8B5CF6);
+  background: var(--accent-primary);
   border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
@@ -299,5 +299,85 @@ const handleCommand = (command: string) => {
 
 .logout-item {
   color: var(--error) !important;
+}
+
+@media (max-width: 720px) {
+  .layout-container {
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .header {
+    height: 56px;
+    padding: 0 14px;
+  }
+
+  .logo {
+    gap: 8px;
+  }
+
+  .logo-icon {
+    width: 32px;
+    height: 32px;
+  }
+
+  .user-badge,
+  .user-email,
+  .dropdown-icon {
+    display: none;
+  }
+
+  .user-info {
+    padding: 4px;
+  }
+
+  .body-container {
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .sidebar {
+    width: 100% !important;
+    height: 54px;
+    min-height: 54px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-right: 0;
+    border-bottom: 1px solid var(--border-default);
+  }
+
+  .sidebar-menu {
+    display: flex;
+    width: max-content;
+    min-width: 100%;
+    height: 53px;
+    padding: 4px 8px;
+  }
+
+  .sidebar-menu > .el-menu-item,
+  :deep(.sidebar-menu > .el-menu-item-group > ul > .el-menu-item) {
+    flex: 0 0 auto;
+    height: 44px;
+    margin: 0 2px;
+    padding: 0 12px;
+  }
+
+  :deep(.sidebar-menu > .el-menu-item-group) {
+    display: contents;
+  }
+
+  :deep(.sidebar-menu > .el-menu-item-group > .el-menu-item-group__title) {
+    display: none;
+  }
+
+  :deep(.sidebar-menu > .el-menu-item-group > ul) {
+    display: contents;
+  }
+
+  .main-content {
+    width: 100%;
+    padding: 14px;
+    overflow: visible;
+  }
 }
 </style>

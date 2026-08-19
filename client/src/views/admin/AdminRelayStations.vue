@@ -46,9 +46,9 @@
           <template #default="{ row }">
             <el-button v-if="!row.isPrimary" link type="primary" :disabled="!row.isActive" @click="setPrimary(row)">设为主站</el-button>
             <el-tag v-else type="success" effect="plain">当前主站</el-tag>
-            <el-button link @click="toggleActive(row)">{{ row.isActive ? '停用' : '启用' }}</el-button>
+            <el-button link :disabled="row.isPrimary && row.isActive" @click="toggleActive(row)">{{ row.isActive ? '停用' : '启用' }}</el-button>
             <el-button link @click="openEdit(row)">编辑</el-button>
-            <el-button link type="danger" :disabled="row.taskCount > 0" @click="removeStation(row)">删除</el-button>
+            <el-button link type="danger" :disabled="row.isPrimary || row.taskCount > 0" @click="removeStation(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -75,6 +75,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { adminApi, type RelayStation } from '@/api/admin'
+import { relayKeyRules } from '@/features/admin/relay-station'
 
 const stations = ref<RelayStation[]>([])
 const loading = ref(false)
@@ -83,11 +84,11 @@ const dialogVisible = ref(false)
 const editing = ref<RelayStation | null>(null)
 const formRef = ref<FormInstance>()
 const form = reactive({ name: '', baseUrl: '', keyValue: '', isPrimary: false })
-const rules: FormRules = {
+const rules = computed<FormRules>(() => ({
   name: [{ required: true, message: '请输入站点名称', trigger: 'blur' }],
   baseUrl: [{ required: true, message: '请输入 Base URL', trigger: 'blur' }],
-  keyValue: [{ required: true, message: '请输入 API Key', trigger: 'blur' }],
-}
+  keyValue: relayKeyRules(Boolean(editing.value)),
+}))
 
 const primaryStation = computed(() => stations.value.find((station) => station.isPrimary && station.isActive))
 const activeCount = computed(() => stations.value.filter((station) => station.isActive).length)

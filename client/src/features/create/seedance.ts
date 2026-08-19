@@ -3,6 +3,7 @@ export type ModelId = 'doubao-seedance-2-5' | 'doubao-seedance-2-0' | 'doubao-se
 export type Resolution = '480p' | '720p' | '1080p' | '4k'
 export type Ratio = '16:9' | '4:3' | '1:1' | '3:4' | '9:16' | '21:9' | 'adaptive'
 export type OmniTaskType = 'auto' | 'reference' | 'edit' | 'extend'
+export const MAX_DATA_URL_CHARS = 48 * 1024 * 1024
 
 export interface AssetInput {
   id: string
@@ -24,6 +25,12 @@ export interface CreateFormState {
   watermark: boolean
   output_format: 'mp4' | 'mov'
   omni_reference_task_type: OmniTaskType
+  return_last_frame: boolean
+  callback_url: string
+  execution_expires_after: number
+  safety_identifier: string
+  priority: number
+  web_search: boolean
   assets: AssetInput[]
   draftTaskId: string
 }
@@ -46,9 +53,13 @@ export const MODEL_OPTIONS: Array<{ value: ModelId; label: string; resolutions: 
 export const createDefaultForm = (): CreateFormState => ({
   mode: 'text', prompt: '', model: 'doubao-seedance-2-5', resolution: '720p', ratio: 'adaptive', duration: -1,
   generate_audio: true, watermark: false, output_format: 'mp4', omni_reference_task_type: 'auto', assets: [], draftTaskId: '',
+  return_last_frame: false, callback_url: '', execution_expires_after: 172800, safety_identifier: '', priority: 0, web_search: false,
 })
 
-export const buildTaskRequest = (form: Pick<CreateFormState, 'mode' | 'prompt' | 'model' | 'resolution' | 'ratio' | 'duration' | 'generate_audio' | 'watermark' | 'output_format' | 'omni_reference_task_type' | 'assets' | 'draftTaskId'>) => {
+type TaskFormInput = Pick<CreateFormState, 'mode' | 'prompt' | 'model' | 'resolution' | 'ratio' | 'duration' | 'generate_audio' | 'watermark' | 'output_format' | 'omni_reference_task_type' | 'assets' | 'draftTaskId'>
+  & Partial<Pick<CreateFormState, 'return_last_frame' | 'callback_url' | 'execution_expires_after' | 'safety_identifier' | 'priority' | 'web_search'>>
+
+export const buildTaskRequest = (form: TaskFormInput) => {
   const prompt = form.prompt.trim()
   const content: Record<string, any>[] = []
   if (prompt) content.push({ type: 'text', text: prompt })
@@ -68,6 +79,12 @@ export const buildTaskRequest = (form: Pick<CreateFormState, 'mode' | 'prompt' |
     generate_audio: form.generate_audio, watermark: form.watermark, output_format: form.output_format,
   }
   if (form.mode === 'reference' && form.model === 'doubao-seedance-2-5') params.omni_reference_task_type = form.omni_reference_task_type
+  if (form.return_last_frame !== undefined) params.return_last_frame = form.return_last_frame
+  if (form.callback_url?.trim()) params.callback_url = form.callback_url.trim()
+  if (form.execution_expires_after !== undefined) params.execution_expires_after = form.execution_expires_after
+  if (form.safety_identifier?.trim()) params.safety_identifier = form.safety_identifier.trim()
+  if (form.priority !== undefined) params.priority = form.priority
+  if (form.web_search) params.tools = [{ type: 'web_search' }]
   return { prompt, params }
 }
 
@@ -77,6 +94,10 @@ export const fileToDataUrl = (file: File): Promise<string> => new Promise((resol
   reader.onerror = () => reject(new Error('读取素材失败'))
   reader.readAsDataURL(file)
 })
+
+export const exceedsDataUrlLimit = (assets: AssetInput[]): boolean => assets
+  .filter((asset) => asset.source.startsWith('data:'))
+  .reduce((total, asset) => total + asset.source.length, 0) > MAX_DATA_URL_CHARS
 
 export const fileRoleForMode = (mode: CreateMode, kind: AssetInput['kind'], index: number): AssetInput['role'] => {
   if (mode === 'first-frame' && kind === 'image') return 'first_frame'

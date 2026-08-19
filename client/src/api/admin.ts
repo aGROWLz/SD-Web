@@ -7,7 +7,6 @@ export interface AdminUser {
   createdAt: string
   _count: {
     tasks: number
-    apiKeys: number
   }
   canGenerate: boolean
 }

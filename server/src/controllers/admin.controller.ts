@@ -1,98 +1,8 @@
 import { Response } from 'express';
 import prisma from '../lib/prisma';
 import { AuthRequest } from '../types';
-import { KeyEncryptionService } from '../services/key-encryption.service';
 import { assertGenerationAccessUpdate } from '../domain/relay-station';
 import { AppError } from '../middlewares/errorHandler';
-
-export const getPlatformKeys = async (req: AuthRequest, res: Response) => {
-  try {
-    const keys = await prisma.apiKey.findMany({
-      where: { type: 'PLATFORM' },
-      select: {
-        id: true,
-        name: true,
-        type: true,
-        isActive: true,
-        rateLimit: true,
-        createdAt: true,
-      },
-    });
-
-    res.json({ keys });
-  } catch (error) {
-    console.error('Get platform keys error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-};
-
-export const addPlatformKey = async (req: AuthRequest, res: Response) => {
-  try {
-    const { name, keyValue, rateLimit = 60 } = req.body;
-
-    if (!name || !keyValue) {
-      return res.status(400).json({ error: 'Name and key value are required' });
-    }
-
-    const encryptedKey = KeyEncryptionService.encrypt(keyValue);
-
-    const apiKey = await prisma.apiKey.create({
-      data: {
-        name,
-        keyValue: encryptedKey,
-        type: 'PLATFORM',
-        ownerId: null,
-        rateLimit,
-      },
-      select: {
-        id: true,
-        name: true,
-        type: true,
-        isActive: true,
-        rateLimit: true,
-        createdAt: true,
-      },
-    });
-
-    res.status(201).json({ key: apiKey });
-  } catch (error) {
-    console.error('Add platform key error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-};
-
-export const updateKeyStatus = async (req: AuthRequest, res: Response) => {
-  try {
-    const id = req.params.id;
-    const { isActive } = req.body;
-
-    if (typeof id !== 'string') {
-      return res.status(400).json({ error: 'Invalid key ID' });
-    }
-
-    if (typeof isActive !== 'boolean') {
-      return res.status(400).json({ error: 'isActive must be a boolean' });
-    }
-
-    const key = await prisma.apiKey.update({
-      where: { id },
-      data: { isActive },
-      select: {
-        id: true,
-        name: true,
-        type: true,
-        isActive: true,
-        rateLimit: true,
-        createdAt: true,
-      },
-    });
-
-    res.json({ key });
-  } catch (error) {
-    console.error('Update key status error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-};
 
 export const getAllUsers = async (req: AuthRequest, res: Response) => {
   try {
@@ -114,7 +24,7 @@ export const getAllUsers = async (req: AuthRequest, res: Response) => {
           canGenerate: true,
           createdAt: true,
           _count: {
-            select: { tasks: true, apiKeys: true },
+            select: { tasks: true },
           },
         },
         orderBy: { createdAt: 'desc' },

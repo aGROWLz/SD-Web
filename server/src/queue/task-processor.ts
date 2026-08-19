@@ -6,6 +6,7 @@ import { KeyEncryptionService } from '../services/key-encryption.service';
 import { TaskNotifier } from '../websocket/task-notifier';
 import { io } from '../index';
 import { notifyTaskUpdate, notifyTaskCompleted, notifyTaskFailed } from '../socket';
+import { markProcessorConfigured } from './processor-registry';
 
 export interface TaskJobData {
   taskId: string;
@@ -13,6 +14,8 @@ export interface TaskJobData {
 }
 
 export const setupTaskProcessor = (queue: Queue.Queue) => {
+  if (!markProcessorConfigured(queue)) return;
+
   queue.process(3, async (job: Queue.Job<TaskJobData>) => {
     const { taskId, relayStationId } = job.data;
 

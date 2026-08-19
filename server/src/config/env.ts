@@ -1,3 +1,10 @@
+import dotenv from 'dotenv';
+import path from 'path';
+
+dotenv.config({
+  path: process.env.DOTENV_CONFIG_PATH || path.resolve(process.cwd(), 'server/.env'),
+});
+
 export const config = {
   port: process.env.PORT || 3000,
   nodeEnv: process.env.NODE_ENV || 'development',

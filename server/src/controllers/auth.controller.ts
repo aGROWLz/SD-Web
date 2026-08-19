@@ -6,7 +6,7 @@ import { AuthRequest } from '../types';
 import { AppError } from '../middlewares/errorHandler';
 
 export const register = async (req: Request, res: Response) => {
-  const { email, password, role = 'USER' } = req.body;
+  const { email, password } = req.body;
 
   const existingUser = await prisma.user.findUnique({ where: { email } });
   if (existingUser) {
@@ -18,7 +18,7 @@ export const register = async (req: Request, res: Response) => {
     data: {
       email,
       passwordHash,
-      role: role.toUpperCase(),
+      role: 'USER',
     },
     select: {
       id: true,

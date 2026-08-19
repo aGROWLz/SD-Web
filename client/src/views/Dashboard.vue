@@ -215,11 +215,11 @@ const formatTime = (dateStr: string) => {
 }
 
 const goToTasks = () => {
-  router.push('/keys')
+  router.push('/tasks')
 }
 
 const createNewTask = () => {
-  router.push('/keys')
+  router.push('/create')
 }
 
 onMounted(() => {

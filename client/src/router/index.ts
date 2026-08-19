@@ -35,11 +35,12 @@ const router = createRouter({
           meta: { requiresAuth: true }
         },
         {
-          path: '/keys',
-          name: 'Keys',
-          component: () => import('@/views/Keys.vue'),
+          path: '/tasks',
+          name: 'Tasks',
+          component: () => import('@/views/Tasks.vue'),
           meta: { requiresAuth: true }
         },
+        { path: '/keys', redirect: '/tasks' },
         {
           path: '/admin/relay-stations',
           name: 'AdminRelayStations',

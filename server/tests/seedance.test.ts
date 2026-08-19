@@ -65,4 +65,82 @@ describe('normalizeSeedanceRequest', () => {
       ],
     })).toThrow('首帧/首尾帧不能与参考素材混用');
   });
+
+  it('allows a draft task without a top-level prompt', () => {
+    const result = normalizeSeedanceRequest('', {
+      model: 'doubao-seedance-2-5',
+      content: [{ type: 'draft_task', draft_task: { id: 'draft_123' } }],
+    });
+
+    expect(result.content).toEqual([{ type: 'draft_task', draft_task: { id: 'draft_123' } }]);
+  });
+
+  it('preserves supported official snake_case parameters', () => {
+    const result = normalizeSeedanceRequest('镜头推进', {
+      model: 'doubao-seedance-2-5',
+      content: [{ type: 'text', text: '镜头推进' }],
+      return_last_frame: true,
+      callback_url: 'https://example.com/callback',
+      execution_expires_after: 7200,
+      safety_identifier: 'user-42',
+      priority: 7,
+      tools: [{ type: 'web_search' }],
+    });
+
+    expect(result).toMatchObject({
+      return_last_frame: true,
+      callback_url: 'https://example.com/callback',
+      execution_expires_after: 7200,
+      safety_identifier: 'user-42',
+      priority: 7,
+      tools: [{ type: 'web_search' }],
+    });
+  });
+
+  it('rejects parameters unsupported by the selected model instead of dropping them', () => {
+    for (const params of [
+      { seed: 42 },
+      { camera_fixed: true },
+      { frames: 49 },
+      { draft: true },
+      { service_tier: 'default' },
+    ]) {
+      expect(() => normalizeSeedanceRequest('镜头推进', {
+        content: [{ type: 'text', text: '镜头推进' }],
+        ...params,
+      } as any)).toThrow('当前模型不支持参数');
+    }
+  });
+
+  it('rejects invalid runtime enum and boolean values', () => {
+    expect(() => normalizeSeedanceRequest('镜头', {
+      ratio: 'invalid' as any,
+      content: [{ type: 'text', text: '镜头' }],
+    })).toThrow('比例参数无效');
+    expect(() => normalizeSeedanceRequest('镜头', {
+      generate_audio: 'false' as any,
+      content: [{ type: 'text', text: '镜头' }],
+    })).toThrow('generate_audio 必须是布尔值');
+    expect(() => normalizeSeedanceRequest('镜头', {
+      output_format: 'avi' as any,
+      content: [{ type: 'text', text: '镜头' }],
+    })).toThrow('输出格式无效');
+  });
+
+  it('rejects a reference task type outside a Seedance 2.5 reference task', () => {
+    expect(() => normalizeSeedanceRequest('镜头', {
+      model: 'doubao-seedance-2-0',
+      omni_reference_task_type: 'edit',
+      content: [{ type: 'text', text: '镜头' }],
+    })).toThrow('当前任务不支持 omni_reference_task_type');
+  });
+
+  it('rejects malformed params and content with a client error message', () => {
+    expect(() => normalizeSeedanceRequest('镜头', null as any)).toThrow('参数格式不正确');
+    expect(() => normalizeSeedanceRequest('镜头', { content: 'bad' as any })).toThrow('content 必须是数组');
+    expect(() => normalizeSeedanceRequest('镜头', {
+      content: [{ type: 'unknown' } as any],
+    })).toThrow('不支持的素材类型');
+  });
+
 });

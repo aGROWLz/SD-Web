@@ -28,8 +28,12 @@ export const validateRegister = (req: Request, res: Response, next: NextFunction
     throw new AppError('密码至少8位，且包含字母和数字', 400);
   }
 
-  if (role && !['USER', 'ADMIN'].includes(role.toUpperCase())) {
-    throw new AppError('角色类型无效', 400);
+  if (role !== undefined && typeof role !== 'string') {
+    throw new AppError('角色格式不正确', 400);
+  }
+
+  if (role && role.toUpperCase() !== 'USER') {
+    throw new AppError('注册接口不允许指定管理员角色', 400);
   }
 
   next();
@@ -54,16 +58,17 @@ export const validateLogin = (req: Request, res: Response, next: NextFunction) =
 export const validateCreateTask = (req: Request, res: Response, next: NextFunction) => {
   const { prompt } = req.body;
 
-  if (!prompt || typeof prompt !== 'string') {
-    throw new AppError('提示词为必填项', 400);
+  if (prompt !== undefined && typeof prompt !== 'string') {
+    throw new AppError('提示词格式不正确', 400);
   }
 
-  if (prompt.trim().length < 10) {
-    throw new AppError('提示词至少需要10个字符', 400);
-  }
-
-  if (prompt.length > 500) {
+  if (typeof prompt === 'string' && prompt.length > 500) {
     throw new AppError('提示词不能超过500个字符', 400);
+  }
+
+  const content = req.body.params?.content;
+  if ((!prompt || !prompt.trim()) && (!Array.isArray(content) || content.length === 0)) {
+    throw new AppError('提示词或参考素材至少需要填写一项', 400);
   }
 
   next();
@@ -83,6 +88,12 @@ export const validateRelayStation = (req: Request, res: Response, next: NextFunc
   if (keyValue !== undefined && keyValue.trim().length > 0 && keyValue.trim().length < 10) {
     throw new AppError('API Key 长度不正确', 400);
   }
+  if (req.body.isActive !== undefined && typeof req.body.isActive !== 'boolean') {
+    throw new AppError('isActive 必须是布尔值', 400);
+  }
+  if (req.body.isPrimary !== undefined && typeof req.body.isPrimary !== 'boolean') {
+    throw new AppError('isPrimary 必须是布尔值', 400);
+  }
   next();
 };
 
@@ -90,29 +101,6 @@ export const validateGenerationAccess = (req: Request, res: Response, next: Next
   if (typeof req.body.canGenerate !== 'boolean') {
     throw new AppError('canGenerate 必须是布尔值', 400);
   }
-  next();
-};
-
-// 添加 API Key 验证
-export const validateAddKey = (req: Request, res: Response, next: NextFunction) => {
-  const { name, keyValue } = req.body;
-
-  if (!name || typeof name !== 'string') {
-    throw new AppError('密钥名称为必填项', 400);
-  }
-
-  if (name.trim().length < 2) {
-    throw new AppError('密钥名称至少需要2个字符', 400);
-  }
-
-  if (!keyValue || typeof keyValue !== 'string') {
-    throw new AppError('密钥值为必填项', 400);
-  }
-
-  if (keyValue.trim().length < 10) {
-    throw new AppError('密钥值长度不正确', 400);
-  }
-
   next();
 };
 

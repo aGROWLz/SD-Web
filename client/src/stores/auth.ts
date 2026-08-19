@@ -58,10 +58,6 @@ export const useAuthStore = defineStore('auth', () => {
     return user.value?.role === 'ADMIN'
   }
 
-  const canManageKeys = () => {
-    return !!user.value
-  }
-
   // 初始化
   initAuth()
 
@@ -73,7 +69,6 @@ export const useAuthStore = defineStore('auth', () => {
     logout,
     isAuthenticated,
     hasRole,
-    isAdmin,
-    canManageKeys
+    isAdmin
   }
 })

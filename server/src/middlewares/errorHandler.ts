@@ -21,6 +21,12 @@ export const errorHandler = (
 ) => {
   console.error('Error:', err);
 
+  if ((err as any).type === 'entity.too.large' || (err as any).status === 413) {
+    return res.status(413).json({
+      error: '上传素材总大小不能超过 64 MB'
+    });
+  }
+
   // 处理自定义应用错误
   if (err instanceof AppError) {
     return res.status(err.statusCode).json({

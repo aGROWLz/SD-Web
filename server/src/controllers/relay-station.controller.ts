@@ -2,7 +2,11 @@ import { Response } from 'express';
 import prisma from '../lib/prisma';
 import { AuthRequest } from '../types';
 import { KeyEncryptionService } from '../services/key-encryption.service';
-import { normalizeRelayBaseUrl } from '../domain/relay-station';
+import {
+  assertRelayStationCanDelete,
+  assertRelayStationState,
+  normalizeRelayBaseUrl,
+} from '../domain/relay-station';
 import { AppError } from '../middlewares/errorHandler';
 
 const maskKey = (value: string) => {
@@ -22,6 +26,14 @@ const serialize = (station: any) => ({
   taskCount: station._count?.tasks ?? 0,
 });
 
+const parseBaseUrl = (value: string) => {
+  try {
+    return normalizeRelayBaseUrl(value);
+  } catch (error: any) {
+    throw new AppError(error.message, 400);
+  }
+};
+
 export const getRelayStations = async (_req: AuthRequest, res: Response) => {
   const stations = await prisma.relayStation.findMany({
     include: { _count: { select: { tasks: true } } },
@@ -34,8 +46,14 @@ export const createRelayStation = async (req: AuthRequest, res: Response) => {
   const { name, baseUrl, keyValue } = req.body;
   if (!keyValue?.trim()) throw new AppError('新增中转站必须提供 API Key', 400);
 
-  const normalizedUrl = normalizeRelayBaseUrl(baseUrl);
+  const normalizedUrl = parseBaseUrl(baseUrl);
   const shouldBePrimary = Boolean(req.body.isPrimary);
+  const isActive = req.body.isActive !== false;
+  try {
+    assertRelayStationState(shouldBePrimary, isActive);
+  } catch (error: any) {
+    throw new AppError(error.message, 400);
+  }
   const station = await prisma.$transaction(async (tx) => {
     if (shouldBePrimary) await tx.relayStation.updateMany({ data: { isPrimary: false } });
     return tx.relayStation.create({
@@ -43,7 +61,7 @@ export const createRelayStation = async (req: AuthRequest, res: Response) => {
         name: name.trim(),
         baseUrl: normalizedUrl,
         apiKeyEncrypted: KeyEncryptionService.encrypt(keyValue.trim()),
-        isActive: req.body.isActive !== false,
+        isActive,
         isPrimary: shouldBePrimary,
       },
       include: { _count: { select: { tasks: true } } },
@@ -58,9 +76,15 @@ export const updateRelayStation = async (req: AuthRequest, res: Response) => {
   if (!current) throw new AppError('中转站不存在', 404);
 
   const { name, baseUrl, keyValue } = req.body;
-  const data: any = { name: name.trim(), baseUrl: normalizeRelayBaseUrl(baseUrl) };
+  const data: any = { name: name.trim(), baseUrl: parseBaseUrl(baseUrl) };
   if (keyValue?.trim()) data.apiKeyEncrypted = KeyEncryptionService.encrypt(keyValue.trim());
   if (typeof req.body.isActive === 'boolean') data.isActive = req.body.isActive;
+
+  try {
+    assertRelayStationState(current.isPrimary, data.isActive ?? current.isActive);
+  } catch (error: any) {
+    throw new AppError(error.message, 400);
+  }
 
   const station = await prisma.relayStation.update({
     where: { id },
@@ -93,7 +117,11 @@ export const deleteRelayStation = async (req: AuthRequest, res: Response) => {
     include: { _count: { select: { tasks: true } } },
   });
   if (!station) throw new AppError('中转站不存在', 404);
-  if (station._count.tasks > 0) throw new AppError('已有任务使用该中转站，不能删除', 409);
+  try {
+    assertRelayStationCanDelete(station.isPrimary, station._count.tasks);
+  } catch (error: any) {
+    throw new AppError(error.message, 409);
+  }
   await prisma.relayStation.delete({ where: { id } });
   res.json({ message: '中转站已删除' });
 };

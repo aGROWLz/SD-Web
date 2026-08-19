@@ -17,11 +17,12 @@ export interface SeeDance2TaskParams {
   duration?: number; // 视频时长（秒），或 -1 表示自动选择
   generate_audio?: boolean; // 是否生成有声视频
   watermark?: boolean; // 是否添加水印
-  seed?: number; // 随机种子，-1 表示随机
-  camera_fixed?: boolean; // 是否固定摄像头
+  return_last_frame?: boolean;
   callback_url?: string; // 回调地址
+  execution_expires_after?: number;
   safety_identifier?: string; // 用户标识
   priority?: number; // 执行优先级 [0-9]
+  tools?: Array<{ type: 'web_search' }>;
   output_format?: 'mp4' | 'mov';
   omni_reference_task_type?: 'auto' | 'reference' | 'edit' | 'extend';
 }

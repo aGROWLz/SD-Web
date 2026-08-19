@@ -61,7 +61,7 @@ export function useSocket() {
         duration: 5000,
         onClick: () => {
           // 跳转到任务详情
-          window.location.href = `/keys`
+          window.location.href = `/tasks`
         }
       })
       window.dispatchEvent(new CustomEvent('task:completed', { detail: data }))

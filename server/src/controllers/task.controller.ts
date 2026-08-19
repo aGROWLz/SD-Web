@@ -35,8 +35,8 @@ export const createTask = async (req: AuthRequest, res: Response) => {
     const { prompt, params = {} } = req.body;
     const userId = req.user!.userId;
 
-    if (!prompt || typeof prompt !== 'string') {
-      return res.status(400).json({ error: 'Prompt is required' });
+    if (prompt !== undefined && typeof prompt !== 'string') {
+      return res.status(400).json({ error: '提示词格式不正确' });
     }
 
     // 获取用户信息
@@ -87,7 +87,7 @@ export const createTask = async (req: AuthRequest, res: Response) => {
 
     let normalizedParams;
     try {
-      normalizedParams = normalizeSeedanceRequest(prompt, params);
+      normalizedParams = normalizeSeedanceRequest(prompt ?? '', params);
     } catch (error: any) {
       return res.status(400).json({ error: error.message });
     }
@@ -97,7 +97,7 @@ export const createTask = async (req: AuthRequest, res: Response) => {
       data: {
         userId,
         relayStationId: relayStation.id,
-        prompt,
+        prompt: prompt ?? '',
         params: normalizedParams as any,
         status: 'PENDING',
       },
@@ -106,7 +106,6 @@ export const createTask = async (req: AuthRequest, res: Response) => {
           select: {
             id: true,
             name: true,
-            baseUrl: true,
           },
         },
       },

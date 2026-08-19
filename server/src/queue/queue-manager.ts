@@ -18,12 +18,9 @@ export class QueueManager {
           port: config.redis.port,
         },
         defaultJobOptions: {
-          attempts: 3,
-          backoff: {
-            type: 'exponential',
-            delay: 2000,
-          },
-          timeout: 600000, // 10 分钟
+          // A retry after upstream submission could create and bill a duplicate video.
+          attempts: 1,
+          timeout: 2700000, // 覆盖 30 分钟轮询、HTTP 查询和结果下载余量
           removeOnComplete: 100,
           removeOnFail: 200,
         },

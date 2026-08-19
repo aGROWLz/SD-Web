@@ -8,6 +8,7 @@ export type SeedanceResolution = '480p' | '720p' | '1080p' | '4k';
 export type SeedanceRatio = '16:9' | '4:3' | '1:1' | '3:4' | '9:16' | '21:9' | 'adaptive';
 export type SeedanceOutputFormat = 'mp4' | 'mov';
 export type SeedanceOmniTaskType = 'auto' | 'reference' | 'edit' | 'extend';
+export type SeedanceServiceTier = 'default' | 'flex';
 export type SeedanceRole =
   | 'first_frame'
   | 'last_frame'
@@ -35,6 +36,17 @@ export interface SeedanceRequestInput {
   generate_audio?: boolean;
   watermark?: boolean;
   output_format?: SeedanceOutputFormat;
+  seed?: number;
+  camera_fixed?: boolean;
+  frames?: number;
+  return_last_frame?: boolean;
+  draft?: boolean;
+  service_tier?: SeedanceServiceTier;
+  callback_url?: string;
+  execution_expires_after?: number;
+  safety_identifier?: string;
+  priority?: number;
+  tools?: Array<{ type: 'web_search' }>;
 }
 
 export interface SeedanceRequest {
@@ -47,6 +59,12 @@ export interface SeedanceRequest {
   generate_audio: boolean;
   watermark: boolean;
   output_format: SeedanceOutputFormat;
+  return_last_frame?: boolean;
+  callback_url?: string;
+  execution_expires_after?: number;
+  safety_identifier?: string;
+  priority?: number;
+  tools?: Array<{ type: 'web_search' }>;
 }
 
 interface ModelCapability {
@@ -101,6 +119,46 @@ const ensureMediaUrl = (url: string | undefined): string => {
   return value;
 };
 
+const MODELS = Object.keys(MODEL_CAPABILITIES) as SeedanceModel[];
+const RATIOS: SeedanceRatio[] = ['16:9', '4:3', '1:1', '3:4', '9:16', '21:9', 'adaptive'];
+const TASK_TYPES: SeedanceOmniTaskType[] = ['auto', 'reference', 'edit', 'extend'];
+const OUTPUT_FORMATS: SeedanceOutputFormat[] = ['mp4', 'mov'];
+
+const requireBoolean = (value: unknown, name: string): boolean | undefined => {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'boolean') throw new Error(`${name} 必须是布尔值`);
+  return value;
+};
+
+const requireIntegerRange = (
+  value: unknown,
+  name: string,
+  min: number,
+  max: number,
+): number | undefined => {
+  if (value === undefined) return undefined;
+  if (!Number.isInteger(value) || (value as number) < min || (value as number) > max) {
+    throw new Error(`${name} 必须是 ${min}–${max} 之间的整数`);
+  }
+  return value as number;
+};
+
+const normalizeOptionalUrl = (value: unknown, name: string): string | undefined => {
+  if (value === undefined || value === '') return undefined;
+  if (typeof value !== 'string') throw new Error(`${name} 格式不正确`);
+  try {
+    const parsed = new URL(value.trim());
+    if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error();
+    return parsed.toString();
+  } catch {
+    throw new Error(`${name} 必须是 HTTP(S) URL`);
+  }
+};
+
+const rejectUnsupportedParameter = (input: SeedanceRequestInput, name: keyof SeedanceRequestInput) => {
+  if (input[name] !== undefined) throw new Error(`当前模型不支持参数 ${name}`);
+};
+
 const normalizeContent = (prompt: string, content: SeedanceContent[]): SeedanceContent[] => {
   const normalized: SeedanceContent[] = [];
 
@@ -109,7 +167,13 @@ const normalizeContent = (prompt: string, content: SeedanceContent[]): SeedanceC
   }
 
   for (const item of content) {
+    if (!item || typeof item !== 'object' || typeof item.type !== 'string') {
+      throw new Error('参考素材格式不正确');
+    }
     if (item.type === 'text') continue;
+    if (!['image_url', 'video_url', 'audio_url', 'draft_task'].includes(item.type)) {
+      throw new Error(`不支持的素材类型 ${item.type}`);
+    }
 
     if (item.type === 'image_url') {
       normalized.push({
@@ -148,9 +212,19 @@ export const normalizeSeedanceRequest = (
   prompt: string,
   input: SeedanceRequestInput,
 ): SeedanceRequest => {
+  if (typeof prompt !== 'string') throw new Error('提示词格式不正确');
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('参数格式不正确');
+  if (input.content !== undefined && !Array.isArray(input.content)) throw new Error('content 必须是数组');
+
   const model = input.model ?? 'doubao-seedance-2-5';
+  if (!MODELS.includes(model)) throw new Error('不支持的 Seedance 模型');
   const capability = MODEL_CAPABILITIES[model];
-  if (!capability) throw new Error('不支持的 Seedance 模型');
+
+  rejectUnsupportedParameter(input, 'seed');
+  rejectUnsupportedParameter(input, 'camera_fixed');
+  rejectUnsupportedParameter(input, 'frames');
+  rejectUnsupportedParameter(input, 'draft');
+  rejectUnsupportedParameter(input, 'service_tier');
 
   const content = normalizeContent(prompt, input.content ?? []);
   if (content.length === 0) throw new Error('提示词或参考素材至少需要填写一项');
@@ -188,7 +262,20 @@ export const normalizeSeedanceRequest = (
     throw new Error(`该模型不支持 ${resolution}`);
   }
 
-  const taskType = model === 'doubao-seedance-2-5' && (videos.length > 0 || referenceImages.length > 0 || audios.length > 0)
+  if (input.ratio !== undefined && !RATIOS.includes(input.ratio)) throw new Error('比例参数无效');
+  if (input.omni_reference_task_type !== undefined && !TASK_TYPES.includes(input.omni_reference_task_type)) {
+    throw new Error('参考任务类型无效');
+  }
+  if (input.output_format !== undefined && !OUTPUT_FORMATS.includes(input.output_format)) {
+    throw new Error('输出格式无效');
+  }
+
+  const supportsOmniTaskType = model === 'doubao-seedance-2-5'
+    && (videos.length > 0 || referenceImages.length > 0 || audios.length > 0);
+  if (input.omni_reference_task_type !== undefined && !supportsOmniTaskType) {
+    throw new Error('当前任务不支持 omni_reference_task_type');
+  }
+  const taskType = supportsOmniTaskType
     ? input.omni_reference_task_type ?? 'auto'
     : undefined;
   let ratio = input.ratio ?? 'adaptive';
@@ -216,6 +303,38 @@ export const normalizeSeedanceRequest = (
     throw new Error('仅 Seedance 2.5 支持 MOV 输出');
   }
 
+  const generateAudio = requireBoolean(input.generate_audio, 'generate_audio') ?? true;
+  const watermark = requireBoolean(input.watermark, 'watermark') ?? false;
+  const returnLastFrame = requireBoolean(input.return_last_frame, 'return_last_frame');
+  const callbackUrl = normalizeOptionalUrl(input.callback_url, 'callback_url');
+  const executionExpiresAfter = requireIntegerRange(
+    input.execution_expires_after,
+    'execution_expires_after',
+    3600,
+    259200,
+  );
+  const priority = requireIntegerRange(input.priority, 'priority', 0, 9);
+
+  let safetyIdentifier: string | undefined;
+  if (input.safety_identifier !== undefined && input.safety_identifier !== '') {
+    if (typeof input.safety_identifier !== 'string'
+      || input.safety_identifier.length > 64
+      || !/^[\x20-\x7E]+$/.test(input.safety_identifier)) {
+      throw new Error('safety_identifier 必须是不超过 64 个字符的英文字符串');
+    }
+    safetyIdentifier = input.safety_identifier;
+  }
+
+  let tools: Array<{ type: 'web_search' }> | undefined;
+  if (input.tools !== undefined) {
+    if (!Array.isArray(input.tools)
+      || input.tools.length === 0
+      || input.tools.some((tool) => !tool || typeof tool !== 'object' || tool.type !== 'web_search')) {
+      throw new Error('tools 仅支持 web_search');
+    }
+    tools = input.tools.map(() => ({ type: 'web_search' as const }));
+  }
+
   return {
     model,
     content,
@@ -223,8 +342,14 @@ export const normalizeSeedanceRequest = (
     resolution,
     ratio,
     duration,
-    generate_audio: input.generate_audio ?? true,
-    watermark: input.watermark ?? false,
+    generate_audio: generateAudio,
+    watermark,
     output_format: outputFormat,
+    ...(returnLastFrame !== undefined ? { return_last_frame: returnLastFrame } : {}),
+    ...(callbackUrl ? { callback_url: callbackUrl } : {}),
+    ...(executionExpiresAfter !== undefined ? { execution_expires_after: executionExpiresAfter } : {}),
+    ...(safetyIdentifier ? { safety_identifier: safetyIdentifier } : {}),
+    ...(priority !== undefined ? { priority } : {}),
+    ...(tools ? { tools } : {}),
   };
 };
