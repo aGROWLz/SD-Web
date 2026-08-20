@@ -143,6 +143,7 @@ model PublicAsset {
   filename         String
   contentType      String                    @map("content_type")
   bytes            Int
+  contentHash      String                    @unique @map("content_hash")
   localPath        String                    @map("local_path")
   providerAssetId  String?                   @map("provider_asset_id")
   providerStatus   PublicAssetProviderStatus @default(PENDING) @map("provider_status")

@@ -69,6 +69,27 @@ const normalizeAssetLibraryField = (value: unknown, field: string, allowEmpty = 
   return normalized;
 };
 
+const normalizeAssetLibraryText = (value: unknown, field: string, allowEmpty = true): string => {
+  if (typeof value !== 'string') throw new Error(`素材库${field}必须是字符串`);
+  if (/[\u0000-\u001F\u007F-\u009F]/.test(value)) throw new Error(`素材库${field}格式不正确`);
+  const normalized = value.trim();
+  if (!normalized && allowEmpty) return '';
+  if (!normalized || normalized.length > 100) {
+    throw new Error(`素材库${field}格式不正确`);
+  }
+  return normalized;
+};
+
+const normalizeAssetLibraryAuthHeader = (value: unknown): string => {
+  if (typeof value !== 'string') throw new Error('素材库鉴权请求头必须是字符串');
+  if (/[\u0000-\u001F\u007F-\u009F]/.test(value)) throw new Error('素材库鉴权请求头格式不正确');
+  const normalized = value.trim();
+  if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(normalized)) {
+    throw new Error('素材库鉴权请求头格式不正确');
+  }
+  return normalized;
+};
+
 export const normalizeAssetLibraryConfig = (value: unknown): AssetLibraryConfig | null => {
   if (value === undefined || value === null) return null;
   if (typeof value !== 'object' || Array.isArray(value)) throw new Error('素材库配置必须是对象');
@@ -93,15 +114,21 @@ export const normalizeAssetLibraryConfig = (value: unknown): AssetLibraryConfig 
     provider,
     uploadUrl: normalizeAssetLibraryUrl(raw.uploadUrl ?? defaults.uploadUrl, 'uploadUrl'),
     queryUrl: normalizeAssetLibraryUrl(raw.queryUrl ?? defaults.queryUrl, 'queryUrl'),
-    authHeader: (raw.authHeader as string | undefined)?.trim() || defaults.authHeader,
-    authPrefix: (raw.authPrefix as string | undefined)?.trim() ?? defaults.authPrefix,
+    authHeader: raw.authHeader === undefined
+      ? defaults.authHeader
+      : normalizeAssetLibraryAuthHeader(raw.authHeader),
+    authPrefix: raw.authPrefix === undefined
+      ? defaults.authPrefix
+      : normalizeAssetLibraryText(raw.authPrefix, '鉴权前缀'),
     fields: {
       url: normalizeAssetLibraryField(fields.url ?? defaults.fields.url, 'url'),
       assetType: normalizeAssetLibraryField(fields.assetType ?? defaults.fields.assetType, 'assetType'),
       name: normalizeAssetLibraryField(fields.name ?? defaults.fields.name, 'name'),
       projectName: normalizeAssetLibraryField(fields.projectName ?? defaults.fields.projectName, 'projectName', true),
     },
-    projectNameValue: (raw.projectNameValue as string | undefined)?.trim() ?? defaults.projectNameValue,
+    projectNameValue: raw.projectNameValue === undefined
+      ? defaults.projectNameValue
+      : normalizeAssetLibraryText(raw.projectNameValue, '项目名称'),
   };
 };
 

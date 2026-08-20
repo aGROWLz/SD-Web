@@ -9,6 +9,7 @@ CREATE TABLE "public_assets" (
     "filename" TEXT NOT NULL,
     "content_type" TEXT NOT NULL,
     "bytes" INTEGER NOT NULL,
+    "content_hash" TEXT NOT NULL,
     "local_path" TEXT NOT NULL,
     "provider_asset_id" TEXT,
     "provider_status" "PublicAssetProviderStatus" NOT NULL DEFAULT 'PENDING',
@@ -20,6 +21,7 @@ CREATE TABLE "public_assets" (
     CONSTRAINT "public_assets_pkey" PRIMARY KEY ("id")
 );
 
+CREATE UNIQUE INDEX "public_assets_content_hash_key" ON "public_assets"("content_hash");
 CREATE INDEX "public_assets_owner_id_idx" ON "public_assets"("owner_id");
 CREATE INDEX "public_assets_created_at_idx" ON "public_assets"("created_at");
 CREATE INDEX "public_assets_provider_status_idx" ON "public_assets"("provider_status");

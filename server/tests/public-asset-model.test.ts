@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   normalizeAssetLibraryConfig,
   type AssetLibraryProvider,
@@ -54,6 +56,17 @@ describe('normalizeAssetLibraryConfig', () => {
     expect(() => normalizeAssetLibraryConfig({ provider: 'UNKNOWN' })).toThrow('素材库供应商');
   });
 
+  it('rejects invalid authorization headers and unsafe text values', () => {
+    expect(() => normalizeAssetLibraryConfig({ provider: 'KK', authHeader: 'Authorization Header' }))
+      .toThrow('鉴权请求头');
+    expect(() => normalizeAssetLibraryConfig({ provider: 'KK', authHeader: 'Authorization\n' }))
+      .toThrow('鉴权请求头');
+    expect(() => normalizeAssetLibraryConfig({ provider: 'KK', authPrefix: `x${'a'.repeat(100)}` }))
+      .toThrow('鉴权前缀');
+    expect(() => normalizeAssetLibraryConfig({ provider: 'KK', projectNameValue: 'project\rname' }))
+      .toThrow('项目名称');
+  });
+
   it('exports the supported provider type', () => {
     const provider: AssetLibraryProvider = 'KK';
     expect(provider).toBe('KK');
@@ -65,5 +78,10 @@ describe('public asset provider statuses', () => {
     expect(['PENDING', 'ACTIVE', 'FAILED']).toContain('PENDING');
     expect(['PENDING', 'ACTIVE', 'FAILED']).toContain('ACTIVE');
     expect(['PENDING', 'ACTIVE', 'FAILED']).toContain('FAILED');
+  });
+
+  it('stores a unique sha256 content hash for deduplication', () => {
+    const schema = readFileSync(resolve(__dirname, '../prisma/schema.prisma'), 'utf8');
+    expect(schema).toMatch(/contentHash\s+String\s+@unique\s+@map\("content_hash"\)/);
   });
 });
