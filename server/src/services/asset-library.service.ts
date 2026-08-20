@@ -52,10 +52,15 @@ const readPath = (value: unknown, paths: string[][]): unknown => {
 };
 
 const assetTypeForMime = (contentType: string): AssetType => {
-  const prefix = contentType.trim().toLowerCase().split('/', 1)[0];
+  const match = /^([a-z]+)\/(.+)$/i.exec(contentType.trim());
+  const prefix = match?.[1].toLowerCase();
+  if (!match || !match[2].trim()) {
+    throw new AssetLibraryError(0, 'INVALID_CONTENT_TYPE', '素材库仅支持图片、视频或音频 MIME 类型');
+  }
   if (prefix === 'video') return 'Video';
   if (prefix === 'audio') return 'Audio';
-  return 'Image';
+  if (prefix === 'image') return 'Image';
+  throw new AssetLibraryError(0, 'INVALID_CONTENT_TYPE', '素材库仅支持图片、视频或音频 MIME 类型');
 };
 
 const sanitizeMessage = (value: unknown, apiKey: string): string => {
@@ -73,15 +78,17 @@ const isSuccessfulCode = (code: unknown): boolean => code === 0 || code === 'suc
 const parseResult = (body: unknown, status: number, apiKey: string): AssetLibraryResult => {
   const root = asRecord(body);
   const code = responseCode(body);
-  if (!isSuccessfulCode(code)) {
+  const idValue = readPath(body, [
+    ['data', 'Id'], ['data', 'id'], ['data', 'asset_id'], ['id'], ['Id'],
+  ]);
+  const hasValidId = (typeof idValue === 'string' || typeof idValue === 'number') && Boolean(String(idValue).trim());
+
+  if (code !== undefined && !isSuccessfulCode(code)) {
     const message = sanitizeMessage(root.message ?? root.msg ?? root.error, apiKey);
     throw new AssetLibraryError(status, code ?? 'BUSINESS_ERROR', message);
   }
 
-  const idValue = readPath(body, [
-    ['data', 'Id'], ['data', 'id'], ['data', 'asset_id'], ['id'], ['Id'],
-  ]);
-  if (typeof idValue !== 'string' && typeof idValue !== 'number' || !String(idValue).trim()) {
+  if (!hasValidId) {
     throw new AssetLibraryError(status, code ?? 'MISSING_ID', '素材库响应缺少素材 ID');
   }
 
@@ -110,7 +117,7 @@ const normalizeStatus = (value: string | undefined): AssetLibraryResult['status'
 };
 
 const requestHeaders = (config: AssetLibraryConfig, apiKey: string): Record<string, string> => ({
-  [config.authHeader]: `${config.authPrefix}${apiKey}`,
+  [config.authHeader]: `${config.authPrefix}${config.authPrefix && !/\s$/.test(config.authPrefix) ? ' ' : ''}${apiKey}`,
   'Content-Type': 'application/json',
 });
 
@@ -137,11 +144,18 @@ const execute = async (
   init: RequestInit,
   fetchImpl: FetchImpl,
 ): Promise<AssetLibraryResult> => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30_000);
   let response: Response;
   try {
-    response = await fetchImpl(url, init);
+    response = await fetchImpl(url, { ...init, signal: controller.signal });
   } catch (error: any) {
+    if (controller.signal.aborted) {
+      throw new AssetLibraryError(0, 'TIMEOUT', '素材库请求超时');
+    }
     throw new AssetLibraryError(0, 'NETWORK_ERROR', sanitizeMessage(error?.message, apiKey));
+  } finally {
+    clearTimeout(timeout);
   }
   const body = await parseResponse(response, apiKey);
   return parseResult(body, response.status, apiKey);
@@ -177,7 +191,11 @@ export const queryAsset = async (
   const encodedId = encodeURIComponent(assetId);
   const url = config.queryUrl.includes('{id}')
     ? config.queryUrl.split('{id}').join(encodedId)
-    : `${config.queryUrl.replace(/\/$/, '')}/${encodedId}`;
+    : (() => {
+      const parsed = new URL(config.queryUrl);
+      parsed.pathname = `${parsed.pathname.replace(/\/+$/, '')}/${encodedId}`;
+      return parsed.toString();
+    })();
   return execute(config, apiKey, url, {
     method: 'GET',
     headers: requestHeaders(config, apiKey),

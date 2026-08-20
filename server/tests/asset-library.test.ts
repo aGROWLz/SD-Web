@@ -41,6 +41,16 @@ describe('asset library service', () => {
     });
   });
 
+  it('adds a separator when an auth prefix has no trailing whitespace', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(response({ code: 0, id: 'prefixed-1' }));
+    const config = normalizeAssetLibraryConfig({ provider: 'KK', authPrefix: 'Bearer' })!;
+
+    await uploadAsset(config, 'secret-key', {
+      publicUrl: 'https://cdn.example/image.png', filename: 'image.png', contentType: 'image/png',
+    }, fetchImpl as any);
+    expect(fetchImpl.mock.calls[0][1].headers.Authorization).toBe('Bearer secret-key');
+  });
+
   it('uploads to XKU p4 with project name and case-sensitive fields', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(response({
       code: 'success',
@@ -103,12 +113,61 @@ describe('asset library service', () => {
     }));
   });
 
+  it('accepts a successful response without a code when a top-level id is present', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(response({ Id: 'xku-no-code', Status: 'Active' }));
+    const config = normalizeAssetLibraryConfig({ provider: 'XKU_P4' })!;
+
+    await expect(queryAsset(config, 'query-key', 'xku-no-code', fetchImpl as any))
+      .resolves.toMatchObject({ id: 'xku-no-code', status: 'Active' });
+  });
+
   it('appends encoded id when query URL has no placeholder', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(response({ code: 0, data: { id: 'xku-1' } }));
     const config = normalizeAssetLibraryConfig({ provider: 'XKU_P4' })!;
 
     await queryAsset(config, 'key', 'xku/1', fetchImpl as any);
     expect(fetchImpl.mock.calls[0][0]).toBe(`${config.queryUrl}/xku%2F1`);
+  });
+
+  it('inserts an encoded id into the query URL pathname while preserving query and hash', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(response({ code: 0, id: 'xku-2' }));
+    const config = normalizeAssetLibraryConfig({
+      provider: 'XKU_P4',
+      queryUrl: 'https://library.example/assets?project=p4#status',
+    })!;
+
+    await queryAsset(config, 'key', 'xku/2', fetchImpl as any);
+    expect(fetchImpl.mock.calls[0][0]).toBe('https://library.example/assets/xku%2F2?project=p4#status');
+  });
+
+  it('rejects unsupported or empty MIME types with a structured error', async () => {
+    const config = normalizeAssetLibraryConfig({ provider: 'KK' })!;
+    const fetchImpl = vi.fn();
+    for (const contentType of ['', 'image', 'application/octet-stream']) {
+      await expect(uploadAsset(config, 'key', {
+        publicUrl: 'https://cdn.example/file', filename: 'file', contentType,
+      }, fetchImpl as any)).rejects.toMatchObject({ status: 0, code: 'INVALID_CONTENT_TYPE' });
+    }
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('aborts requests after 30 seconds and reports a timeout error', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn().mockImplementation((_url: string, init: RequestInit) => new Promise((_resolve, reject) => {
+        init.signal?.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+      }));
+      const config = normalizeAssetLibraryConfig({ provider: 'KK' })!;
+      const pending = uploadAsset(config, 'key', {
+        publicUrl: 'https://cdn.example/image.png', filename: 'image.png', contentType: 'image/png',
+      }, fetchImpl as any);
+      expect(fetchImpl.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
+      const timeoutAssertion = expect(pending).rejects.toMatchObject({ status: 0, code: 'TIMEOUT' });
+      await vi.advanceTimersByTimeAsync(30_000);
+      await timeoutAssertion;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('returns structured errors for HTTP, JSON, business-code, and missing-id failures', async () => {
