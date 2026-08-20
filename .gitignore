@@ -48,3 +48,6 @@ dump.rdb
 
 # Brainstorming
 .superpowers/
+
+# Local worktrees
+.worktrees/
