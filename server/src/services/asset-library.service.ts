@@ -121,11 +121,12 @@ const requestHeaders = (config: AssetLibraryConfig, apiKey: string): Record<stri
   'Content-Type': 'application/json',
 });
 
-const parseResponse = async (response: Response, apiKey: string): Promise<unknown> => {
+const parseResponse = async (response: Response, apiKey: string, signal?: AbortSignal): Promise<unknown> => {
   let body: unknown;
   try {
     body = await response.json();
-  } catch {
+  } catch (error: any) {
+    if (signal?.aborted || error?.name === 'AbortError') throw error;
     throw new AssetLibraryError(response.status, 'INVALID_JSON', '素材库返回的响应格式无效');
   }
 
@@ -146,10 +147,12 @@ const execute = async (
 ): Promise<AssetLibraryResult> => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30_000);
-  let response: Response;
   try {
-    response = await fetchImpl(url, { ...init, signal: controller.signal });
+    const response = await fetchImpl(url, { ...init, signal: controller.signal });
+    const body = await parseResponse(response, apiKey, controller.signal);
+    return parseResult(body, response.status, apiKey);
   } catch (error: any) {
+    if (error instanceof AssetLibraryError) throw error;
     if (controller.signal.aborted) {
       throw new AssetLibraryError(0, 'TIMEOUT', '素材库请求超时');
     }
@@ -157,8 +160,6 @@ const execute = async (
   } finally {
     clearTimeout(timeout);
   }
-  const body = await parseResponse(response, apiKey);
-  return parseResult(body, response.status, apiKey);
 };
 
 export const uploadAsset = async (

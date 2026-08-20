@@ -170,6 +170,29 @@ describe('asset library service', () => {
     }
   });
 
+  it('keeps the timeout active while reading a response body', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn().mockImplementation((_url: string, init: RequestInit) => Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => new Promise((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+          setTimeout(() => reject(new Error('body still pending')), 31_000);
+        }),
+      }));
+      const config = normalizeAssetLibraryConfig({ provider: 'KK' })!;
+      const pending = uploadAsset(config, 'key', {
+        publicUrl: 'https://cdn.example/image.png', filename: 'image.png', contentType: 'image/png',
+      }, fetchImpl as any);
+      const timeoutAssertion = expect(pending).rejects.toMatchObject({ status: 0, code: 'TIMEOUT' });
+      await vi.advanceTimersByTimeAsync(31_000);
+      await timeoutAssertion;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('returns structured errors for HTTP, JSON, business-code, and missing-id failures', async () => {
     const config = normalizeAssetLibraryConfig({ provider: 'KK' })!;
     const key = 'do-not-leak-this-key';
