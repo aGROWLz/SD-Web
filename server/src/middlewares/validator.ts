@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppError } from './errorHandler';
+import { normalizeModelRedirects } from '../domain/relay-station';
 
 // 邮箱验证
 export const validateEmail = (email: string): boolean => {
@@ -93,6 +94,18 @@ export const validateRelayStation = (req: Request, res: Response, next: NextFunc
   }
   if (req.body.isPrimary !== undefined && typeof req.body.isPrimary !== 'boolean') {
     throw new AppError('isPrimary 必须是布尔值', 400);
+  }
+  if (req.body.appendApiV3 !== undefined && typeof req.body.appendApiV3 !== 'boolean') {
+    throw new AppError('appendApiV3 必须是布尔值', 400);
+  }
+  if (req.body.assetLibraryConfig !== undefined && req.body.assetLibraryConfig !== null
+    && (typeof req.body.assetLibraryConfig !== 'object' || Array.isArray(req.body.assetLibraryConfig))) {
+    throw new AppError('素材库配置必须是对象或 null', 400);
+  }
+  try {
+    normalizeModelRedirects(req.body.modelRedirects);
+  } catch (error: any) {
+    throw new AppError(error.message, 400);
   }
   next();
 };

@@ -32,7 +32,11 @@
       <el-form label-position="top" class="storage-form">
         <el-form-item label="WORKER_URL"><el-input v-model="storageForm.workerUrl" placeholder="https://your-worker.example.com" /></el-form-item>
         <el-form-item label="Key"><el-input v-model="storageForm.keyValue" type="password" show-password :placeholder="storage.keyMasked ? `已配置：${storage.keyMasked}，留空保持不变` : '输入 R2 Worker key'" /></el-form-item>
-        <div class="storage-actions"><el-button type="primary" :loading="storageSaving" @click="saveStorage">保存配置</el-button><el-button :disabled="!storage.keyMasked || storageSaving" @click="clearStorageKey">清除 Key</el-button></div>
+        <div class="storage-actions">
+          <el-button type="primary" :loading="storageSaving" @click="saveStorage">保存配置</el-button>
+          <el-button :loading="storageTesting" :disabled="!storage.configured || storageSaving" @click="testStorageConnection">测试连通</el-button>
+          <el-button :disabled="!storage.keyMasked || storageSaving || storageTesting" @click="clearStorageKey">清除 Key</el-button>
+        </div>
       </el-form>
       <p class="storage-hint">未配置 R2 时，只有图片素材允许回退为 Base64；音频和视频素材需要先完成配置。</p>
     </section>
@@ -55,8 +59,9 @@
         <el-table-column label="创建时间" width="150">
           <template #default="{ row }">{{ formatDate(row.createdAt) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="245" fixed="right">
+        <el-table-column label="操作" width="360" fixed="right">
           <template #default="{ row }">
+            <el-button link type="primary" :loading="testingStationId === row.id" @click="testConnection(row)">测试连通</el-button>
             <el-button v-if="!row.isPrimary" link type="primary" :disabled="!row.isActive" @click="setPrimary(row)">设为主站</el-button>
             <el-tag v-else type="success" effect="plain">当前主站</el-tag>
             <el-button link :disabled="row.isPrimary && row.isActive" @click="toggleActive(row)">{{ row.isActive ? '停用' : '启用' }}</el-button>
@@ -68,14 +73,59 @@
       <el-empty v-if="!loading && stations.length === 0" description="还没有配置中转站" />
     </div>
 
-    <el-dialog v-model="dialogVisible" :title="editing ? '编辑中转站' : '添加中转站'" width="520px" destroy-on-close>
+    <el-dialog v-model="dialogVisible" :title="editing ? '编辑中转站' : '添加中转站'" width="620px" destroy-on-close>
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
         <el-form-item label="站点名称" prop="name"><el-input v-model="form.name" placeholder="例如：主线路由" /></el-form-item>
         <el-form-item label="Base URL" prop="baseUrl"><el-input v-model="form.baseUrl" placeholder="https://relay.example.com" /></el-form-item>
+        <el-form-item label="自动补齐 API 前缀">
+          <el-switch v-model="form.appendApiV3" active-text="补齐 /api/v3" inactive-text="使用完整自定义路径" />
+        </el-form-item>
         <el-form-item label="API Key" prop="keyValue">
           <el-input v-model="form.keyValue" type="password" show-password :placeholder="editing ? '留空表示保持原 Key' : '输入兼容中转站的 API Key'" />
         </el-form-item>
-        <div class="form-hint">系统会自动补齐 `/api/v3`，Key 只加密存储，不会在列表中显示明文。</div>
+        <div class="form-hint">{{ form.appendApiV3 ? '系统会自动补齐 `/api/v3`。' : '系统将直接使用上方填写的完整接口前缀。' }} Key 只加密存储，不会在列表中显示明文。</div>
+        <div class="asset-library-section">
+          <div class="redirect-heading">
+            <h3>管理员素材库</h3>
+            <p>用于把生成素材同步到指定供应商；关闭后仍保留当前配置。</p>
+          </div>
+          <div class="asset-library-toolbar">
+            <el-form-item label="启用素材库">
+              <el-switch v-model="form.assetLibraryConfig.enabled" />
+            </el-form-item>
+            <el-form-item label="供应商预设">
+              <el-select v-model="form.assetLibraryConfig.provider" @change="applyAssetLibraryPreset">
+                <el-option label="KK" value="KK" />
+                <el-option label="XKU p4" value="XKU_P4" />
+              </el-select>
+            </el-form-item>
+          </div>
+          <div class="asset-library-grid">
+            <el-form-item label="上传 URL"><el-input v-model="form.assetLibraryConfig.uploadUrl" /></el-form-item>
+            <el-form-item label="查询 URL"><el-input v-model="form.assetLibraryConfig.queryUrl" /></el-form-item>
+            <el-form-item label="鉴权头"><el-input v-model="form.assetLibraryConfig.authHeader" /></el-form-item>
+            <el-form-item label="鉴权前缀"><el-input v-model="form.assetLibraryConfig.authPrefix" /></el-form-item>
+            <el-form-item label="URL 字段"><el-input v-model="form.assetLibraryConfig.fields.url" /></el-form-item>
+            <el-form-item label="类型字段"><el-input v-model="form.assetLibraryConfig.fields.assetType" /></el-form-item>
+            <el-form-item label="名称字段"><el-input v-model="form.assetLibraryConfig.fields.name" /></el-form-item>
+            <el-form-item label="ProjectName 字段"><el-input v-model="form.assetLibraryConfig.fields.projectName" /></el-form-item>
+            <el-form-item label="ProjectName 值"><el-input v-model="form.assetLibraryConfig.projectNameValue" /></el-form-item>
+          </div>
+        </div>
+        <div class="redirect-section">
+          <div class="redirect-heading">
+            <h3>模型重定向</h3>
+            <p>中转站模型名不一致时填写；留空则使用对应的默认 API 模型名。</p>
+          </div>
+          <el-form-item v-for="model in SEEDANCE_MODELS" :key="model" :label="model">
+            <el-input
+              v-model="form.modelRedirects[model]"
+              maxlength="100"
+              clearable
+              :placeholder="`留空使用 ${DEFAULT_SEEDANCE_API_MODELS[model]}`"
+            />
+          </el-form-item>
+        </div>
         <el-form-item v-if="!editing" label="创建后设为主站"><el-switch v-model="form.isPrimary" /></el-form-item>
       </el-form>
       <template #footer><el-button @click="dialogVisible = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveStation">保存</el-button></template>
@@ -87,7 +137,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import { adminApi, type RelayStation, type StorageConfig } from '@/api/admin'
+import { adminApi, DEFAULT_SEEDANCE_API_MODELS, type AssetLibraryConfig, type AssetLibraryProvider, type RelayStation, type SeedanceModelName, type StorageConfig } from '@/api/admin'
 import { relayKeyRules } from '@/features/admin/relay-station'
 
 const stations = ref<RelayStation[]>([])
@@ -96,10 +146,50 @@ const saving = ref(false)
 const dialogVisible = ref(false)
 const editing = ref<RelayStation | null>(null)
 const formRef = ref<FormInstance>()
-const form = reactive({ name: '', baseUrl: '', keyValue: '', isPrimary: false })
+const SEEDANCE_MODELS: readonly SeedanceModelName[] = [
+  'doubao-seedance-2-5',
+  'doubao-seedance-2-0',
+  'doubao-seedance-2-0-fast',
+  'doubao-seedance-2-0-mini',
+]
+const emptyModelRedirects = (): Record<SeedanceModelName, string> => ({
+  'doubao-seedance-2-5': '',
+  'doubao-seedance-2-0': '',
+  'doubao-seedance-2-0-fast': '',
+  'doubao-seedance-2-0-mini': '',
+})
+const ASSET_LIBRARY_PRESETS: Record<AssetLibraryProvider, AssetLibraryConfig> = {
+  KK: {
+    enabled: true,
+    provider: 'KK',
+    uploadUrl: 'https://ai.kkidc.com/api/v2/assets',
+    queryUrl: 'https://ai.kkidc.com/api/v2/assets/{id}',
+    authHeader: 'Authorization',
+    authPrefix: '',
+    fields: { url: 'url', assetType: 'asset_type', name: 'name', projectName: '' },
+    projectNameValue: 'default',
+  },
+  XKU_P4: {
+    enabled: true,
+    provider: 'XKU_P4',
+    uploadUrl: 'https://api-ai.xku.com/ark/p4/v1/assets',
+    queryUrl: 'https://api-ai.xku.com/ark/p4/v1/assets',
+    authHeader: 'Authorization',
+    authPrefix: '',
+    fields: { url: 'URL', assetType: 'AssetType', name: 'Name', projectName: 'ProjectName' },
+    projectNameValue: 'default',
+  },
+}
+const cloneAssetLibraryConfig = (value: AssetLibraryConfig | null | undefined): AssetLibraryConfig => {
+  const source = value ?? ASSET_LIBRARY_PRESETS.KK
+  return { ...source, fields: { ...source.fields } }
+}
+const form = reactive({ name: '', baseUrl: '', keyValue: '', appendApiV3: true, isPrimary: false, modelRedirects: emptyModelRedirects(), assetLibraryConfig: cloneAssetLibraryConfig(undefined) })
 const storage = reactive<StorageConfig>({ workerUrl: '', configured: false, keyMasked: '' })
 const storageForm = reactive({ workerUrl: '', keyValue: '' })
 const storageSaving = ref(false)
+const storageTesting = ref(false)
+const testingStationId = ref<string | null>(null)
 const rules = computed<FormRules>(() => ({
   name: [{ required: true, message: '请输入站点名称', trigger: 'blur' }],
   baseUrl: [{ required: true, message: '请输入 Base URL', trigger: 'blur' }],
@@ -145,16 +235,39 @@ const clearStorageKey = async () => {
   finally { storageSaving.value = false }
 }
 
-const resetForm = () => { form.name = ''; form.baseUrl = ''; form.keyValue = ''; form.isPrimary = false }
+const testStorageConnection = async () => {
+  storageTesting.value = true
+  try {
+    const result = (await adminApi.testStorageConnection()).data
+    if (result.ok) ElMessage.success(result.message)
+    else ElMessage.error(result.message)
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.error || 'R2 连通测试失败')
+  } finally {
+    storageTesting.value = false
+  }
+}
+
+const resetForm = () => { form.name = ''; form.baseUrl = ''; form.keyValue = ''; form.appendApiV3 = true; form.isPrimary = false; form.modelRedirects = emptyModelRedirects(); form.assetLibraryConfig = cloneAssetLibraryConfig(undefined) }
 const openCreate = () => { editing.value = null; resetForm(); dialogVisible.value = true }
-const openEdit = (station: RelayStation) => { editing.value = station; form.name = station.name; form.baseUrl = station.baseUrl; form.keyValue = ''; form.isPrimary = false; dialogVisible.value = true }
+const openEdit = (station: RelayStation) => { editing.value = station; form.name = station.name; form.baseUrl = station.baseUrl; form.keyValue = ''; form.appendApiV3 = station.appendApiV3; form.isPrimary = false; form.modelRedirects = { ...emptyModelRedirects(), ...station.modelRedirects }; form.assetLibraryConfig = cloneAssetLibraryConfig(station.assetLibraryConfig); dialogVisible.value = true }
+const applyAssetLibraryPreset = (provider: AssetLibraryProvider) => { const enabled = form.assetLibraryConfig.enabled; form.assetLibraryConfig = { ...cloneAssetLibraryConfig(ASSET_LIBRARY_PRESETS[provider]), enabled } }
+
+const stationPayload = () => ({
+  name: form.name,
+  baseUrl: form.baseUrl,
+  appendApiV3: form.appendApiV3,
+  keyValue: form.keyValue || undefined,
+  modelRedirects: { ...form.modelRedirects },
+  assetLibraryConfig: cloneAssetLibraryConfig(form.assetLibraryConfig),
+})
 
 const saveStation = async () => {
   if (!formRef.value || !(await formRef.value.validate().catch(() => false))) return
   saving.value = true
   try {
-    if (editing.value) await adminApi.updateRelayStation(editing.value.id, { name: form.name, baseUrl: form.baseUrl, keyValue: form.keyValue || undefined })
-    else await adminApi.addRelayStation(form)
+    if (editing.value) await adminApi.updateRelayStation(editing.value.id, stationPayload())
+    else await adminApi.addRelayStation({ ...stationPayload(), isPrimary: form.isPrimary })
     ElMessage.success('中转站已保存'); dialogVisible.value = false; await fetchStations()
   } catch (error: any) { ElMessage.error(error.response?.data?.error || '保存失败') }
   finally { saving.value = false }
@@ -165,8 +278,21 @@ const setPrimary = async (station: RelayStation) => {
   catch (error: any) { if (error !== 'cancel') ElMessage.error(error.response?.data?.error || '切换失败') }
 }
 
+const testConnection = async (station: RelayStation) => {
+  testingStationId.value = station.id
+  try {
+    const result = (await adminApi.testRelayStation(station.id)).data
+    if (result.ok) ElMessage.success('中转站连通测试成功')
+    else ElMessage.error(result.message)
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.error || '连通测试失败')
+  } finally {
+    testingStationId.value = null
+  }
+}
+
 const toggleActive = async (station: RelayStation) => {
-  try { await adminApi.updateRelayStation(station.id, { name: station.name, baseUrl: station.baseUrl, isActive: !station.isActive }); ElMessage.success(station.isActive ? '中转站已停用' : '中转站已启用'); await fetchStations() }
+  try { await adminApi.updateRelayStation(station.id, { name: station.name, baseUrl: station.baseUrl, appendApiV3: station.appendApiV3, modelRedirects: { ...station.modelRedirects }, isActive: !station.isActive }); ElMessage.success(station.isActive ? '中转站已停用' : '中转站已启用'); await fetchStations() }
   catch (error: any) { ElMessage.error(error.response?.data?.error || '更新失败') }
 }
 
@@ -193,5 +319,8 @@ onMounted(() => { fetchStations(); fetchStorage() })
 .storage-panel { margin-bottom:16px; padding:20px; border:1px solid var(--border-default); background:var(--bg-secondary); border-radius:8px; }
 .storage-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:14px; }.storage-heading h2{margin:0;color:var(--text-primary);font-size:18px}.storage-heading p:not(.eyebrow){margin:6px 0 0;color:var(--text-muted);font-size:12px}.storage-form{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) auto;align-items:end;gap:12px}.storage-form :deep(.el-form-item){margin-bottom:0}.storage-actions{display:flex;gap:8px;padding-bottom:1px;white-space:nowrap}.storage-hint{margin:14px 0 0;color:var(--text-muted);font-size:11px;line-height:1.5}
 .station-name { display:flex; align-items:center; gap:8px; color:var(--text-primary); font-weight:600; }.station-url{display:block;margin:5px 0 0 16px;color:var(--text-muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.status-dot{width:7px;height:7px;border-radius:50%;background:var(--text-muted)}.status-dot.active{background:var(--success);box-shadow:0 0 0 3px var(--success-light)}code{color:var(--text-secondary);font-size:12px}.form-hint{margin:-4px 0 18px;color:var(--text-muted);font-size:12px;line-height:1.5}
-@media(max-width:700px){.page-header{align-items:flex-start;flex-direction:column}.summary-grid{grid-template-columns:1fr}.storage-form{grid-template-columns:1fr}.storage-actions{padding-top:4px}.table-shell{overflow:auto}.table-shell :deep(.el-table){min-width:850px}}
+.asset-library-section{margin:2px 0 18px;padding:16px;border:1px solid var(--border-default);border-radius:8px;background:var(--bg-tertiary)}.asset-library-toolbar{display:grid;grid-template-columns:1fr 1fr;gap:12px}.asset-library-toolbar :deep(.el-form-item){margin-bottom:12px}.asset-library-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}.asset-library-grid :deep(.el-form-item){margin-bottom:12px}.asset-library-grid :deep(.el-input__wrapper),.asset-library-toolbar :deep(.el-select){width:100%}
+.admin-page :deep(.el-dialog__body){max-height:calc(100vh - 220px);overflow-y:auto}
+.redirect-section{margin:2px 0 18px;padding:16px;border:1px solid var(--border-default);border-radius:8px;background:var(--bg-tertiary)}.redirect-heading{margin-bottom:14px}.redirect-heading h3{margin:0;color:var(--text-primary);font-size:14px;line-height:1.4}.redirect-heading p{margin:5px 0 0;color:var(--text-muted);font-size:12px;line-height:1.5}.redirect-section :deep(.el-form-item:last-child){margin-bottom:0}.redirect-section :deep(.el-form-item__label){font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px}
+@media(max-width:700px){.page-header{align-items:flex-start;flex-direction:column}.summary-grid{grid-template-columns:1fr}.storage-form{grid-template-columns:1fr}.storage-actions{padding-top:4px}.table-shell{overflow:auto}.table-shell :deep(.el-table){min-width:850px}.asset-library-toolbar,.asset-library-grid{grid-template-columns:1fr}}
 </style>

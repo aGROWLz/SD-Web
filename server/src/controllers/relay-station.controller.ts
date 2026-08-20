@@ -5,9 +5,12 @@ import { KeyEncryptionService } from '../services/key-encryption.service';
 import {
   assertRelayStationCanDelete,
   assertRelayStationState,
+  normalizeAssetLibraryConfig,
+  normalizeModelRedirects,
   normalizeRelayBaseUrl,
 } from '../domain/relay-station';
 import { AppError } from '../middlewares/errorHandler';
+import { testRelayStationConnection } from '../services/relay-station-connection.service';
 
 const maskKey = (value: string) => {
   if (value.length <= 8) return '••••••••';
@@ -18,6 +21,9 @@ const serialize = (station: any) => ({
   id: station.id,
   name: station.name,
   baseUrl: station.baseUrl,
+  appendApiV3: station.appendApiV3,
+  modelRedirects: normalizeModelRedirects(station.modelRedirects),
+  assetLibraryConfig: normalizeAssetLibraryConfig(station.assetLibraryConfig),
   apiKeyMasked: maskKey(KeyEncryptionService.decrypt(station.apiKeyEncrypted)),
   isActive: station.isActive,
   isPrimary: station.isPrimary,
@@ -26,9 +32,17 @@ const serialize = (station: any) => ({
   taskCount: station._count?.tasks ?? 0,
 });
 
-const parseBaseUrl = (value: string) => {
+const parseBaseUrl = (value: string, appendApiV3: boolean) => {
   try {
-    return normalizeRelayBaseUrl(value);
+    return normalizeRelayBaseUrl(value, appendApiV3);
+  } catch (error: any) {
+    throw new AppError(error.message, 400);
+  }
+};
+
+const parseAssetLibraryConfig = (value: unknown) => {
+  try {
+    return normalizeAssetLibraryConfig(value);
   } catch (error: any) {
     throw new AppError(error.message, 400);
   }
@@ -46,7 +60,9 @@ export const createRelayStation = async (req: AuthRequest, res: Response) => {
   const { name, baseUrl, keyValue } = req.body;
   if (!keyValue?.trim()) throw new AppError('新增中转站必须提供 API Key', 400);
 
-  const normalizedUrl = parseBaseUrl(baseUrl);
+  const appendApiV3 = req.body.appendApiV3 !== false;
+  const normalizedUrl = parseBaseUrl(baseUrl, appendApiV3);
+  const assetLibraryConfig = parseAssetLibraryConfig(req.body.assetLibraryConfig);
   const shouldBePrimary = Boolean(req.body.isPrimary);
   const isActive = req.body.isActive !== false;
   try {
@@ -60,6 +76,9 @@ export const createRelayStation = async (req: AuthRequest, res: Response) => {
       data: {
         name: name.trim(),
         baseUrl: normalizedUrl,
+        appendApiV3,
+        modelRedirects: normalizeModelRedirects(req.body.modelRedirects),
+        ...(assetLibraryConfig === null ? {} : { assetLibraryConfig }),
         apiKeyEncrypted: KeyEncryptionService.encrypt(keyValue.trim()),
         isActive,
         isPrimary: shouldBePrimary,
@@ -76,7 +95,20 @@ export const updateRelayStation = async (req: AuthRequest, res: Response) => {
   if (!current) throw new AppError('中转站不存在', 404);
 
   const { name, baseUrl, keyValue } = req.body;
-  const data: any = { name: name.trim(), baseUrl: parseBaseUrl(baseUrl) };
+  const appendApiV3 = typeof req.body.appendApiV3 === 'boolean'
+    ? req.body.appendApiV3
+    : current.appendApiV3;
+  const data: any = {
+    name: name.trim(),
+    baseUrl: parseBaseUrl(baseUrl, appendApiV3),
+    appendApiV3,
+  };
+  if (req.body.assetLibraryConfig !== undefined) {
+    data.assetLibraryConfig = parseAssetLibraryConfig(req.body.assetLibraryConfig);
+  }
+  if (req.body.modelRedirects !== undefined) {
+    data.modelRedirects = normalizeModelRedirects(req.body.modelRedirects);
+  }
   if (keyValue?.trim()) data.apiKeyEncrypted = KeyEncryptionService.encrypt(keyValue.trim());
   if (typeof req.body.isActive === 'boolean') data.isActive = req.body.isActive;
 
@@ -108,6 +140,20 @@ export const setPrimaryRelayStation = async (req: AuthRequest, res: Response) =>
     });
   });
   res.json({ station: serialize(station) });
+};
+
+export const testRelayStation = async (req: AuthRequest, res: Response) => {
+  const id = req.params.id as string;
+  const station = await prisma.relayStation.findUnique({ where: { id } });
+  if (!station) throw new AppError('中转站不存在', 404);
+
+  const apiKey = KeyEncryptionService.decrypt(station.apiKeyEncrypted);
+  const result = apiKey
+    ? await testRelayStationConnection(station.baseUrl, apiKey)
+    : { ok: false as const, code: 'auth' as const, message: 'API Key 无效或无权限' };
+
+  // Probe failures are business results, not admin authentication failures.
+  res.json(result);
 };
 
 export const deleteRelayStation = async (req: AuthRequest, res: Response) => {
