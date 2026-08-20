@@ -27,6 +27,12 @@ enum TaskStatus {
   FAILED
 }
 
+enum PublicAssetProviderStatus {
+  PENDING
+  ACTIVE
+  FAILED
+}
+
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
@@ -39,6 +45,7 @@ model User {
   apiKeys    ApiKey[]
   tasks      Task[]
   usageLogs  UsageLog[]
+  publicAssets PublicAsset[]
 
   @@map("users")
 }
@@ -114,6 +121,9 @@ model RelayStation {
   id              String   @id @default(uuid())
   name            String
   baseUrl         String   @map("base_url")
+  appendApiV3     Boolean  @default(true) @map("append_api_v3")
+  modelRedirects  Json?    @map("model_redirects")
+  assetLibraryConfig Json?  @map("asset_library_config")
   apiKeyEncrypted String   @map("api_key_encrypted")
   isActive        Boolean  @default(true) @map("is_active")
   isPrimary       Boolean  @default(false) @map("is_primary")
@@ -125,6 +135,28 @@ model RelayStation {
 
   @@index([isActive, isPrimary])
   @@map("relay_stations")
+}
+
+model PublicAsset {
+  id               String                    @id @default(uuid())
+  ownerId          String                    @map("owner_id")
+  filename         String
+  contentType      String                    @map("content_type")
+  bytes            Int
+  localPath        String                    @map("local_path")
+  providerAssetId  String?                   @map("provider_asset_id")
+  providerStatus   PublicAssetProviderStatus @default(PENDING) @map("provider_status")
+  providerUrl      String?                   @map("provider_url")
+  providerError    String?                   @map("provider_error")
+  createdAt        DateTime                  @default(now()) @map("created_at")
+  updatedAt        DateTime                  @updatedAt @map("updated_at")
+
+  owner            User                      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+  @@index([createdAt])
+  @@index([providerStatus])
+  @@map("public_assets")
 }
 
 model StorageSetting {
