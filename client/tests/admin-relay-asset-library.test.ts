@@ -8,7 +8,7 @@ const apiSource = readFileSync(fileURLToPath(new URL('../src/api/admin.ts', impo
 describe('admin relay station asset library configuration', () => {
   it('exposes typed asset library config and submits the complete config', () => {
     expect(apiSource).toContain('export type AssetLibraryProvider = \'KK\' | \'XKU_P4\'')
-    expect(apiSource).toContain('assetLibraryConfig?: AssetLibraryConfig')
+    expect(apiSource).toContain('assetLibraryConfig?: AssetLibraryConfig | null')
     expect(viewSource).toContain('assetLibraryConfig: form.assetLibraryConfig ? cloneAssetLibraryConfig(form.assetLibraryConfig) : null')
     expect(apiSource).toContain('enabled: boolean')
   })
@@ -31,5 +31,10 @@ describe('admin relay station asset library configuration', () => {
     expect(viewSource).toContain('assetLibraryConfig: null')
     expect(viewSource).toContain('station.assetLibraryConfig ? cloneAssetLibraryConfig(station.assetLibraryConfig) : null')
     expect(viewSource).toContain('assetLibraryConfig: form.assetLibraryConfig ? cloneAssetLibraryConfig(form.assetLibraryConfig) : null')
+  })
+
+  it('keeps a selected XKU preset when the asset library remains disabled', () => {
+    expect(viewSource).toContain('const enabled = form.assetLibraryConfig?.enabled ?? false')
+    expect(viewSource).toContain('provider: \'XKU_P4\'')
   })
 })

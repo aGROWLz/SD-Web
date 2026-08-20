@@ -266,7 +266,7 @@ const testStorageConnection = async () => {
 const resetForm = () => { form.name = ''; form.baseUrl = ''; form.keyValue = ''; form.appendApiV3 = true; form.isPrimary = false; form.modelRedirects = emptyModelRedirects(); form.assetLibraryConfig = null }
 const openCreate = () => { editing.value = null; resetForm(); dialogVisible.value = true }
 const openEdit = (station: RelayStation) => { editing.value = station; form.name = station.name; form.baseUrl = station.baseUrl; form.keyValue = ''; form.appendApiV3 = station.appendApiV3; form.isPrimary = false; form.modelRedirects = { ...emptyModelRedirects(), ...station.modelRedirects }; form.assetLibraryConfig = station.assetLibraryConfig ? cloneAssetLibraryConfig(station.assetLibraryConfig) : null; dialogVisible.value = true }
-const applyAssetLibraryPreset = (provider: AssetLibraryProvider) => { const enabled = form.assetLibraryConfig?.enabled ?? true; form.assetLibraryConfig = { ...cloneAssetLibraryConfig(ASSET_LIBRARY_PRESETS[provider]), enabled } }
+const applyAssetLibraryPreset = (provider: AssetLibraryProvider) => { const enabled = form.assetLibraryConfig?.enabled ?? false; form.assetLibraryConfig = { ...cloneAssetLibraryConfig(ASSET_LIBRARY_PRESETS[provider]), enabled } }
 
 const stationPayload = () => ({
   name: form.name,

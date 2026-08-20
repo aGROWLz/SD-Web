@@ -281,6 +281,23 @@ describe('relay station asset library controller', () => {
     expect(response.json.mock.calls[0][0].station.assetLibraryConfig).toEqual(assetLibraryConfig);
   });
 
+  it('clears asset library config when update explicitly supplies null', async () => {
+    const current = {
+      id: 'station-asset', name: '素材站', baseUrl: 'https://relay.example.com/api/v3', appendApiV3: true,
+      modelRedirects: {}, assetLibraryConfig, apiKeyEncrypted: 'encrypted', isActive: true, isPrimary: false,
+    };
+    mocks.findUnique.mockResolvedValue(current);
+    mocks.update.mockImplementation(async ({ data }: any) => ({ ...current, ...data, createdAt: new Date(), updatedAt: new Date(), _count: { tasks: 0 } }));
+    const response = { json: vi.fn() } as any;
+
+    await updateRelayStation({ params: { id: current.id }, body: {
+      name: current.name, baseUrl: current.baseUrl, assetLibraryConfig: null,
+    } } as any, response);
+
+    expect(mocks.update.mock.calls[0][0].data.assetLibraryConfig).toBeNull();
+    expect(response.json.mock.calls[0][0].station.assetLibraryConfig).toBeNull();
+  });
+
   it('rejects invalid asset library config with a 400 error', async () => {
     await expect(createRelayStation({ body: {
       name: '素材站', baseUrl: 'https://relay.example.com', keyValue: 'secret-key-value',

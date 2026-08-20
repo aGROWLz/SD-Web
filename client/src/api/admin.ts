@@ -80,7 +80,7 @@ export interface RelayStationData {
   baseUrl: string
   appendApiV3?: boolean
   modelRedirects: SeedanceModelRedirects
-  assetLibraryConfig?: AssetLibraryConfig
+  assetLibraryConfig?: AssetLibraryConfig | null
   keyValue?: string
   isActive?: boolean
   isPrimary?: boolean
