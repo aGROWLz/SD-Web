@@ -5,6 +5,7 @@ import authRoutes from './routes/auth.routes';
 import adminRoutes from './routes/admin.routes';
 import taskRoutes from './routes/task.routes';
 import relayStationRoutes from './routes/relay-station.routes';
+import assetRoutes from './routes/asset.routes';
 import { SocketServerManager } from './websocket/socket-server';
 import { initializeSocket } from './socket';
 import { errorHandler } from './middlewares/errorHandler';
@@ -24,6 +25,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/admin/relay-stations', relayStationRoutes);
 app.use('/api/tasks', taskRoutes);
+app.use('/api/assets', assetRoutes);
 
 // 全局错误处理中间件（必须在所有路由之后）
 app.use(errorHandler);
