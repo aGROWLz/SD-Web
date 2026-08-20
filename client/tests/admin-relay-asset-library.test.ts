@@ -9,7 +9,7 @@ describe('admin relay station asset library configuration', () => {
   it('exposes typed asset library config and submits the complete config', () => {
     expect(apiSource).toContain('export type AssetLibraryProvider = \'KK\' | \'XKU_P4\'')
     expect(apiSource).toContain('assetLibraryConfig?: AssetLibraryConfig')
-    expect(viewSource).toContain('assetLibraryConfig: cloneAssetLibraryConfig(form.assetLibraryConfig)')
+    expect(viewSource).toContain('assetLibraryConfig: form.assetLibraryConfig ? cloneAssetLibraryConfig(form.assetLibraryConfig) : null')
     expect(apiSource).toContain('enabled: boolean')
   })
 
@@ -22,8 +22,14 @@ describe('admin relay station asset library configuration', () => {
   })
 
   it('allows disabling while retaining config and restores it while editing', () => {
-    expect(viewSource).toContain('v-model="form.assetLibraryConfig.enabled"')
+    expect(viewSource).toContain('v-model="assetLibraryEnabled"')
     expect(viewSource).toContain('station.assetLibraryConfig')
-    expect(viewSource).toContain('form.assetLibraryConfig = cloneAssetLibraryConfig')
+    expect(viewSource).toContain('form.assetLibraryConfig = station.assetLibraryConfig ? cloneAssetLibraryConfig(station.assetLibraryConfig) : null')
+  })
+
+  it('keeps legacy stations with no asset config disabled on save', () => {
+    expect(viewSource).toContain('assetLibraryConfig: null')
+    expect(viewSource).toContain('station.assetLibraryConfig ? cloneAssetLibraryConfig(station.assetLibraryConfig) : null')
+    expect(viewSource).toContain('assetLibraryConfig: form.assetLibraryConfig ? cloneAssetLibraryConfig(form.assetLibraryConfig) : null')
   })
 })

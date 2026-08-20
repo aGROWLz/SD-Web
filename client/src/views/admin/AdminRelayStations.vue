@@ -91,16 +91,16 @@
           </div>
           <div class="asset-library-toolbar">
             <el-form-item label="启用素材库">
-              <el-switch v-model="form.assetLibraryConfig.enabled" />
+              <el-switch v-model="assetLibraryEnabled" />
             </el-form-item>
             <el-form-item label="供应商预设">
-              <el-select v-model="form.assetLibraryConfig.provider" @change="applyAssetLibraryPreset">
+              <el-select v-model="selectedAssetLibraryProvider" @change="applyAssetLibraryPreset">
                 <el-option label="KK" value="KK" />
                 <el-option label="XKU p4" value="XKU_P4" />
               </el-select>
             </el-form-item>
           </div>
-          <div class="asset-library-grid">
+          <div v-if="form.assetLibraryConfig" class="asset-library-grid">
             <el-form-item label="上传 URL"><el-input v-model="form.assetLibraryConfig.uploadUrl" /></el-form-item>
             <el-form-item label="查询 URL"><el-input v-model="form.assetLibraryConfig.queryUrl" /></el-form-item>
             <el-form-item label="鉴权头"><el-input v-model="form.assetLibraryConfig.authHeader" /></el-form-item>
@@ -180,11 +180,8 @@ const ASSET_LIBRARY_PRESETS: Record<AssetLibraryProvider, AssetLibraryConfig> = 
     projectNameValue: 'default',
   },
 }
-const cloneAssetLibraryConfig = (value: AssetLibraryConfig | null | undefined): AssetLibraryConfig => {
-  const source = value ?? ASSET_LIBRARY_PRESETS.KK
-  return { ...source, fields: { ...source.fields } }
-}
-const form = reactive({ name: '', baseUrl: '', keyValue: '', appendApiV3: true, isPrimary: false, modelRedirects: emptyModelRedirects(), assetLibraryConfig: cloneAssetLibraryConfig(undefined) })
+const cloneAssetLibraryConfig = (value: AssetLibraryConfig): AssetLibraryConfig => ({ ...value, fields: { ...value.fields } })
+const form = reactive({ name: '', baseUrl: '', keyValue: '', appendApiV3: true, isPrimary: false, modelRedirects: emptyModelRedirects(), assetLibraryConfig: null as AssetLibraryConfig | null })
 const storage = reactive<StorageConfig>({ workerUrl: '', configured: false, keyMasked: '' })
 const storageForm = reactive({ workerUrl: '', keyValue: '' })
 const storageSaving = ref(false)
@@ -198,6 +195,24 @@ const rules = computed<FormRules>(() => ({
 
 const primaryStation = computed(() => stations.value.find((station) => station.isPrimary && station.isActive))
 const activeCount = computed(() => stations.value.filter((station) => station.isActive).length)
+const assetLibraryEnabled = computed({
+  get: () => Boolean(form.assetLibraryConfig?.enabled),
+  set: (enabled: boolean) => {
+    if (enabled) {
+      form.assetLibraryConfig = form.assetLibraryConfig
+        ? { ...form.assetLibraryConfig, enabled: true }
+        : cloneAssetLibraryConfig(ASSET_LIBRARY_PRESETS.KK)
+    } else if (form.assetLibraryConfig) {
+      form.assetLibraryConfig.enabled = false
+    }
+  },
+})
+const selectedAssetLibraryProvider = computed<AssetLibraryProvider>({
+  get: () => form.assetLibraryConfig?.provider ?? 'KK',
+  set: (provider) => {
+    if (form.assetLibraryConfig) form.assetLibraryConfig.provider = provider
+  },
+})
 
 const fetchStations = async () => {
   loading.value = true
@@ -248,10 +263,10 @@ const testStorageConnection = async () => {
   }
 }
 
-const resetForm = () => { form.name = ''; form.baseUrl = ''; form.keyValue = ''; form.appendApiV3 = true; form.isPrimary = false; form.modelRedirects = emptyModelRedirects(); form.assetLibraryConfig = cloneAssetLibraryConfig(undefined) }
+const resetForm = () => { form.name = ''; form.baseUrl = ''; form.keyValue = ''; form.appendApiV3 = true; form.isPrimary = false; form.modelRedirects = emptyModelRedirects(); form.assetLibraryConfig = null }
 const openCreate = () => { editing.value = null; resetForm(); dialogVisible.value = true }
-const openEdit = (station: RelayStation) => { editing.value = station; form.name = station.name; form.baseUrl = station.baseUrl; form.keyValue = ''; form.appendApiV3 = station.appendApiV3; form.isPrimary = false; form.modelRedirects = { ...emptyModelRedirects(), ...station.modelRedirects }; form.assetLibraryConfig = cloneAssetLibraryConfig(station.assetLibraryConfig); dialogVisible.value = true }
-const applyAssetLibraryPreset = (provider: AssetLibraryProvider) => { const enabled = form.assetLibraryConfig.enabled; form.assetLibraryConfig = { ...cloneAssetLibraryConfig(ASSET_LIBRARY_PRESETS[provider]), enabled } }
+const openEdit = (station: RelayStation) => { editing.value = station; form.name = station.name; form.baseUrl = station.baseUrl; form.keyValue = ''; form.appendApiV3 = station.appendApiV3; form.isPrimary = false; form.modelRedirects = { ...emptyModelRedirects(), ...station.modelRedirects }; form.assetLibraryConfig = station.assetLibraryConfig ? cloneAssetLibraryConfig(station.assetLibraryConfig) : null; dialogVisible.value = true }
+const applyAssetLibraryPreset = (provider: AssetLibraryProvider) => { const enabled = form.assetLibraryConfig?.enabled ?? true; form.assetLibraryConfig = { ...cloneAssetLibraryConfig(ASSET_LIBRARY_PRESETS[provider]), enabled } }
 
 const stationPayload = () => ({
   name: form.name,
@@ -259,7 +274,7 @@ const stationPayload = () => ({
   appendApiV3: form.appendApiV3,
   keyValue: form.keyValue || undefined,
   modelRedirects: { ...form.modelRedirects },
-  assetLibraryConfig: cloneAssetLibraryConfig(form.assetLibraryConfig),
+  assetLibraryConfig: form.assetLibraryConfig ? cloneAssetLibraryConfig(form.assetLibraryConfig) : null,
 })
 
 const saveStation = async () => {
