@@ -84,4 +84,21 @@ describe('public asset provider statuses', () => {
     const schema = readFileSync(resolve(__dirname, '../prisma/schema.prisma'), 'utf8');
     expect(schema).toMatch(/contentHash\s+String\s+@unique\s+@map\("content_hash"\)/);
   });
+
+  it('keeps the initial migration immutable and adds hash backfill separately', () => {
+    const initialMigration = readFileSync(resolve(
+      __dirname,
+      '../prisma/migrations/20260820080000_add_public_assets/migration.sql',
+    ), 'utf8');
+    const hashMigration = readFileSync(resolve(
+      __dirname,
+      '../prisma/migrations/20260820090000_add_public_asset_content_hash/migration.sql',
+    ), 'utf8');
+
+    expect(initialMigration).not.toContain('content_hash');
+    expect(hashMigration).toContain('ADD COLUMN "content_hash" TEXT');
+    expect(hashMigration).toContain('md5("local_path" || \':\' || "id")');
+    expect(hashMigration).toContain('ALTER COLUMN "content_hash" SET NOT NULL');
+    expect(hashMigration).toContain('CREATE UNIQUE INDEX "public_assets_content_hash_key"');
+  });
 });
