@@ -18,8 +18,9 @@
       <small v-if="asset.requiresReselect">需重新选择</small>
     </figcaption>
   </figure>
-  <el-dialog v-model="originalVisible" title="素材预览" width="min(860px, 92vw)" append-to-body align-center destroy-on-close>
-    <img v-if="asset.kind === 'image' && previewUrl" class="original-image" :src="previewUrl" :alt="asset.label" />
+  <el-dialog v-model="originalVisible" title="素材预览" width="min(860px, 92vw)" append-to-body align-center destroy-on-close @closed="releaseOriginalUrl">
+    <div v-if="originalLoading" class="original-loading">正在加载原图...</div>
+    <img v-else-if="asset.kind === 'image' && originalUrl" class="original-image" :src="originalUrl" :alt="asset.label" />
   </el-dialog>
 </template>
 
@@ -35,6 +36,8 @@ const props = withDefaults(defineProps<{ asset: AssetInput; taskId?: string; com
 })
 const previewUrl = ref('')
 const originalVisible = ref(false)
+const originalUrl = ref('')
+const originalLoading = ref(false)
 const loading = ref(false)
 const errorMessage = ref('')
 const previewRoot = ref<HTMLElement>()
@@ -42,6 +45,8 @@ const isVisible = ref(false)
 let objectUrl = ''
 let observer: IntersectionObserver | undefined
 let requestController: AbortController | undefined
+let originalController: AbortController | undefined
+let originalObjectUrl = ''
 let requestVersion = 0
 let disposed = false
 
@@ -67,8 +72,46 @@ const handleMediaError = () => {
   previewUrl.value = ''
   errorMessage.value = '预览不可用'
 }
-const openOriginal = () => {
-  if (props.asset.kind === 'image' && previewUrl.value) originalVisible.value = true
+const releaseOriginalUrl = () => {
+  originalController?.abort()
+  originalController = undefined
+  if (originalObjectUrl) URL.revokeObjectURL(originalObjectUrl)
+  originalObjectUrl = ''
+  originalUrl.value = ''
+  originalLoading.value = false
+}
+const openOriginal = async () => {
+  if (props.asset.kind !== 'image' || !previewUrl.value) return
+  releaseOriginalUrl()
+  originalUrl.value = previewUrl.value
+  originalVisible.value = true
+  const source = props.asset.previewDataUrl || (props.asset.publicAssetId
+    ? `/assets/${props.asset.publicAssetId}/file`
+    : props.taskId && props.asset.contentIndex !== undefined && props.asset.source.startsWith('local-asset://')
+      ? `/tasks/${props.taskId}/assets/${props.asset.contentIndex}`
+      : props.asset.source.startsWith('asset://')
+        ? `/assets/provider/${encodeURIComponent(props.asset.source.slice('asset://'.length))}/file`
+        : props.asset.source)
+  if (source.startsWith('data:') || /^blob:/i.test(source)) {
+    originalUrl.value = source
+    return
+  }
+  const controller = new AbortController()
+  originalController = controller
+  originalLoading.value = true
+  try {
+    const response = await client.get(source.replace(/^\/api(?=\/)/, ''), {
+      responseType: 'blob', signal: controller.signal, headers: { 'X-Silent-Error': '1' },
+    })
+    if (controller.signal.aborted) return
+    originalObjectUrl = URL.createObjectURL(response.data)
+    originalUrl.value = originalObjectUrl
+  } catch {
+    if (!controller.signal.aborted) errorMessage.value = '原图读取失败，当前显示缩略图'
+  } finally {
+    originalLoading.value = false
+    if (originalController === controller) originalController = undefined
+  }
 }
 
 const loadPreview = async () => {
@@ -94,12 +137,13 @@ const loadPreview = async () => {
 
   // 公共素材接口返回的 previewUrl 可能来自旧记录；始终按 publicAssetId 提供一个稳定回退地址。
   const publicAssetPreview = props.asset.publicAssetId
-    ? `/assets/${props.asset.publicAssetId}/file`
+    ? `/assets/${props.asset.publicAssetId}/file?thumbnail=1`
     : ''
+  // 供应商素材接口只返回原文件，图片不能把它作为任务卡预览回退。
   const providerPreview = props.asset.source.startsWith('asset://')
-    ? `/assets/provider/${encodeURIComponent(props.asset.source.slice('asset://'.length))}/file`
+    ? `/assets/provider/${encodeURIComponent(props.asset.source.slice('asset://'.length))}/file${props.asset.kind === 'image' ? '?thumbnail=1' : ''}`
     : ''
-  const requestedPreview = props.asset.previewUrl || publicAssetPreview || providerPreview
+  const requestedPreview = publicAssetPreview || providerPreview
   if (requestedPreview && !requestedPreview.startsWith('data:') && !/^https?:\/\//i.test(requestedPreview)) {
     loading.value = true
     const controller = new AbortController()
@@ -151,7 +195,7 @@ const loadPreview = async () => {
   const controller = new AbortController()
   requestController = controller
   try {
-    const response = await tasksApi.getTaskAsset(props.taskId, props.asset.contentIndex, controller.signal)
+    const response = await tasksApi.getTaskAsset(props.taskId, props.asset.contentIndex, controller.signal, props.asset.kind === 'image')
     if (disposed || version !== requestVersion) return
     const nextObjectUrl = URL.createObjectURL(response.data)
     if (disposed || version !== requestVersion) {
@@ -216,6 +260,7 @@ onBeforeUnmount(() => {
   requestController?.abort()
   observer?.disconnect()
   releaseObjectUrl()
+  releaseOriginalUrl()
 })
 </script>
 
@@ -224,7 +269,7 @@ onBeforeUnmount(() => {
 .asset-visual{position:relative;display:grid;width:100%;min-width:0;min-height:72px;place-items:center;overflow:hidden;background:#0b0f10}
 .asset-image .asset-visual{aspect-ratio:1}
 .asset-image img,.asset-video video{display:block;width:100%;height:100%;object-fit:cover}
-.asset-visual.clickable{cursor:zoom-in}.original-image{display:block;width:100%;max-height:78dvh;object-fit:contain;background:#050708}
+.asset-visual.clickable{cursor:zoom-in}.original-loading{display:grid;min-height:220px;place-items:center;color:var(--text-muted);font-size:13px}.original-image{display:block;width:100%;max-height:78dvh;object-fit:contain;background:#050708}
 .asset-video .asset-visual{aspect-ratio:16/10}
 .asset-audio .asset-visual{min-height:58px;padding:8px}
 .asset-audio audio{display:block;width:100%;max-width:100%;height:32px}

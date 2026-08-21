@@ -27,7 +27,7 @@
             <div class="batch-card-top"><span>#{{ index + 1 }} <em v-if="draft.status">{{ draft.status === 'running' ? '提交中' : '已提交' }}</em></span><el-button text circle size="small" :disabled="draft.status === 'running'" @click="removeBatchDraft(draft.id)"><el-icon><Delete /></el-icon></el-button></div>
             <div class="batch-prompt-block">
               <p class="batch-prompt">{{ draft.form.prompt || '仅使用参考素材' }}</p>
-              <button v-if="draft.form.prompt.length > 120" type="button" class="batch-prompt-expand" @click="expandedBatchPromptId = expandedBatchPromptId === draft.id ? null : draft.id">{{ expandedBatchPromptId === draft.id ? '收起提示词' : '展开完整提示词' }}</button>
+              <button v-if="draft.form.prompt.trim().length > 30" type="button" class="batch-prompt-expand" @click="expandedBatchPromptId = expandedBatchPromptId === draft.id ? null : draft.id">{{ expandedBatchPromptId === draft.id ? '收起提示词' : '展开完整提示词' }}</button>
               <div v-if="expandedBatchPromptId === draft.id" class="batch-prompt-panel">{{ draft.form.prompt }}</div>
             </div>
             <div v-if="draft.form.assets.length" class="batch-assets"><TaskAssetPreview v-for="asset in draft.form.assets" :key="asset.id" :asset="asset" :compact="true" /></div>

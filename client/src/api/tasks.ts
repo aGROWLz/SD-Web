@@ -62,8 +62,8 @@ export const tasksApi = {
   },
 
   // 获取任务中保存的本地参考素材
-  getTaskAsset(id: string, contentIndex: number, signal?: AbortSignal) {
-    return client.get<Blob>(`/tasks/${id}/assets/${contentIndex}`, {
+  getTaskAsset(id: string, contentIndex: number, signal?: AbortSignal, thumbnail = false) {
+    return client.get<Blob>(`/tasks/${id}/assets/${contentIndex}${thumbnail ? '?thumbnail=1' : ''}`, {
       responseType: 'blob',
       signal,
       headers: { 'X-Silent-Error': '1' }

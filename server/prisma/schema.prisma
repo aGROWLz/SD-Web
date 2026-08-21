@@ -121,6 +121,7 @@ model RelayStation {
   id              String   @id @default(uuid())
   name            String
   baseUrl         String   @map("base_url")
+  queryBaseUrl    String?  @map("query_base_url")
   appendApiV3     Boolean  @default(true) @map("append_api_v3")
   modelRedirects  Json?    @map("model_redirects")
   assetLibraryConfig Json?  @map("asset_library_config")

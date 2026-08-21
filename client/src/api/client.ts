@@ -33,6 +33,13 @@ client.interceptors.response.use(
     return response
   },
   (error) => {
+    // 预览请求允许单个素材失败，由调用组件显示占位状态，不能污染全局提示。
+    const requestHeaders = error?.config?.headers
+    const silentPreview = requestHeaders?.['X-Silent-Error'] === '1'
+      || requestHeaders?.['x-silent-error'] === '1'
+      || requestHeaders?.get?.('X-Silent-Error') === '1'
+    if (silentPreview) return Promise.reject(error)
+
     // Scrolling task cards intentionally aborts previews that leave the viewport.
     // 预览组件在滚动离开视口时会主动 abort 请求。不同 Axios 浏览器适配器
     // 对取消请求的错误形态不一致，有些会伪装成没有 response 的 Network Error。

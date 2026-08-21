@@ -63,6 +63,7 @@ export interface RelayStation {
   id: string
   name: string
   baseUrl: string
+  queryBaseUrl: string
   appendApiV3: boolean
   modelRedirects: SeedanceModelRedirects
   assetLibraryConfig: AssetLibraryConfig | null
@@ -81,6 +82,7 @@ export interface RelayStationsResponse {
 export interface RelayStationData {
   name: string
   baseUrl: string
+  queryBaseUrl?: string
   appendApiV3?: boolean
   modelRedirects: SeedanceModelRedirects
   assetLibraryConfig?: AssetLibraryConfig | null

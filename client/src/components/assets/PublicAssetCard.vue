@@ -47,7 +47,7 @@ const statusLabel = computed(() => {
   return ({ ACTIVE: '已就绪', PENDING: '处理中', FAILED: '失败' }[props.asset.providerStatus || 'PENDING'] || props.asset.providerStatus || '本地')
 })
 const statusType = computed(() => props.asset.providerAssetId || props.asset.providerStatus === 'ACTIVE' ? 'success' : props.asset.providerStatus === 'FAILED' ? 'danger' : 'info')
-const providerLabel = computed(() => ({ KK: 'KK 素材库', XKU_P5: 'XKU p5 素材库' }[props.asset.providerLibrary || ''] || '未登记素材库'))
+const providerLabel = computed(() => ({ KK: 'KK 素材库', XKU_P5: 'XKU p5 素材库' }[props.asset.providerLibrary || ''] || props.asset.providerLibrary || '未登记素材库'))
 </script>
 
 <style scoped>

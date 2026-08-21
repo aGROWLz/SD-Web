@@ -1,5 +1,5 @@
 <template>
-  <div class="task-video-preview">
+  <div ref="previewRoot" class="task-video-preview">
     <button class="video-preview-trigger" type="button" aria-label="播放生成的视频" @click="openPlayer">
       <img v-if="thumbnailUrl" :src="thumbnailUrl" alt="视频首帧" @error="handleThumbnailError" />
       <div v-else class="thumbnail-placeholder">
@@ -52,7 +52,7 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Download, Loading, VideoCamera, VideoPlay } from '@element-plus/icons-vue'
 import { tasksApi } from '@/api/tasks'
@@ -65,11 +65,14 @@ const playerVisible = ref(false)
 const playerLoading = ref(false)
 const downloading = ref(false)
 const playerVideo = ref<HTMLVideoElement>()
+const previewRoot = ref<HTMLElement>()
 let thumbnailObjectUrl = ''
 let playerObjectUrl = ''
 let thumbnailController: AbortController | undefined
 let playerController: AbortController | undefined
 let disposed = false
+let thumbnailObserver: IntersectionObserver | undefined
+const thumbnailCache = new Map<string, string>()
 let thumbnailRetryTimer: ReturnType<typeof setTimeout> | undefined
 
 const releaseThumbnail = () => {
@@ -94,6 +97,8 @@ const loadThumbnail = async () => {
   releaseThumbnail()
   thumbnailUrl.value = ''
   if (!props.taskId) return
+  const cached = thumbnailCache.get(props.taskId)
+  if (cached) { thumbnailUrl.value = cached; thumbnailLoading.value = false; return }
 
   const controller = new AbortController()
   thumbnailController = controller
@@ -103,6 +108,7 @@ const loadThumbnail = async () => {
     if (disposed || controller.signal.aborted) return
     thumbnailObjectUrl = URL.createObjectURL(response.data)
     thumbnailUrl.value = thumbnailObjectUrl
+    thumbnailCache.set(props.taskId, thumbnailObjectUrl)
   } catch {
     if (!controller.signal.aborted && !disposed) {
       thumbnailUrl.value = ''
@@ -193,12 +199,21 @@ const downloadVideo = async () => {
   }
 }
 
-watch(() => props.taskId, () => { void loadThumbnail() }, { immediate: true })
+watch(() => props.taskId, () => { thumbnailUrl.value = '' }, { immediate: true })
+
+onMounted(() => {
+  if (!previewRoot.value || !('IntersectionObserver' in window)) { void loadThumbnail(); return }
+  thumbnailObserver = new IntersectionObserver((items) => {
+    if (items[0]?.isIntersecting) { void loadThumbnail(); thumbnailObserver?.disconnect(); thumbnailObserver = undefined }
+  }, { rootMargin: '240px' })
+  thumbnailObserver.observe(previewRoot.value)
+})
 
 onBeforeUnmount(() => {
   disposed = true
   if (thumbnailRetryTimer) clearTimeout(thumbnailRetryTimer)
   thumbnailController?.abort()
+  thumbnailObserver?.disconnect()
   playerController?.abort()
   releaseThumbnail()
   releasePlayer()
