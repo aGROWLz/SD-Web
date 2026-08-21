@@ -1,6 +1,6 @@
 <template>
   <figure ref="previewRoot" class="asset-preview" :class="[{ compact }, `asset-${asset.kind}`]">
-    <div class="asset-visual">
+    <div class="asset-visual" :class="{ clickable: previewUrl && asset.kind === 'image' }" @click="openOriginal">
       <img v-if="asset.kind === 'image' && previewUrl" :src="previewUrl" :alt="asset.label" @error="handleMediaError" />
       <video v-else-if="asset.kind === 'video' && previewUrl" :src="previewUrl" controls preload="metadata" @error="handleMediaError" />
       <audio v-else-if="asset.kind === 'audio' && previewUrl" :src="previewUrl" controls preload="metadata" @error="handleMediaError" />
@@ -11,17 +11,21 @@
       <span v-if="compact" class="material-type-icon" aria-hidden="true">
         <el-icon><component :is="placeholderIcon" /></el-icon>
       </span>
+      <span v-if="asset.kind === 'image' && previewUrl" class="asset-hover-view" aria-hidden="true"><el-icon><ZoomIn /></el-icon></span>
     </div>
     <figcaption v-if="!compact" :title="asset.label">
       <span>{{ asset.label }}</span>
       <small v-if="asset.requiresReselect">需重新选择</small>
     </figcaption>
   </figure>
+  <el-dialog v-model="originalVisible" title="素材预览" width="min(860px, 92vw)" append-to-body align-center destroy-on-close>
+    <img v-if="asset.kind === 'image' && previewUrl" class="original-image" :src="previewUrl" :alt="asset.label" />
+  </el-dialog>
 </template>
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Headset, Picture, VideoCamera } from '@element-plus/icons-vue'
+import { Headset, Picture, VideoCamera, ZoomIn } from '@element-plus/icons-vue'
 import { tasksApi } from '@/api/tasks'
 import client from '@/api/client'
 import type { AssetInput } from '@/features/create/seedance'
@@ -30,6 +34,7 @@ const props = withDefaults(defineProps<{ asset: AssetInput; taskId?: string; com
   compact: false,
 })
 const previewUrl = ref('')
+const originalVisible = ref(false)
 const loading = ref(false)
 const errorMessage = ref('')
 const previewRoot = ref<HTMLElement>()
@@ -61,6 +66,9 @@ const handleMediaError = () => {
   releaseObjectUrl()
   previewUrl.value = ''
   errorMessage.value = '预览不可用'
+}
+const openOriginal = () => {
+  if (props.asset.kind === 'image' && previewUrl.value) originalVisible.value = true
 }
 
 const loadPreview = async () => {
@@ -216,6 +224,7 @@ onBeforeUnmount(() => {
 .asset-visual{position:relative;display:grid;width:100%;min-width:0;min-height:72px;place-items:center;overflow:hidden;background:#0b0f10}
 .asset-image .asset-visual{aspect-ratio:1}
 .asset-image img,.asset-video video{display:block;width:100%;height:100%;object-fit:cover}
+.asset-visual.clickable{cursor:zoom-in}.original-image{display:block;width:100%;max-height:78dvh;object-fit:contain;background:#050708}
 .asset-video .asset-visual{aspect-ratio:16/10}
 .asset-audio .asset-visual{min-height:58px;padding:8px}
 .asset-audio audio{display:block;width:100%;max-width:100%;height:32px}
@@ -228,6 +237,7 @@ onBeforeUnmount(() => {
 .compact.asset-audio .asset-visual{height:48px;padding:8px 26px 8px 8px}
 .compact .asset-audio audio{height:30px}
 .material-type-icon{position:absolute;right:4px;bottom:4px;z-index:1;display:grid;width:16px;height:16px;place-items:center;border:1px solid rgba(255,255,255,.28);border-radius:3px;color:#fff;background:rgba(7,10,11,.72);font-size:10px}
+.asset-hover-view{position:absolute;inset:0;display:grid;place-items:center;color:#fff;background:rgba(5,8,9,.48);font-size:28px;opacity:0;transform:scale(.94);transition:opacity .18s ease,transform .18s ease;pointer-events:none}.asset-visual:hover .asset-hover-view{opacity:1;transform:scale(1)}
 figcaption{display:flex;min-width:0;align-items:center;justify-content:space-between;gap:6px;padding:6px 7px;color:var(--text-muted);font-size:9px}
 figcaption span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 figcaption small{flex:0 0 auto;color:var(--warning);font-size:8px}

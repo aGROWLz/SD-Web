@@ -47,7 +47,7 @@ export const createDefaultForm = (): CreateFormState => ({
   model: 'doubao-seedance-2-0-fast',
   resolution: '720p',
   ratio: 'adaptive',
-  duration: -1,
+  duration: 4,
   generate_audio: true,
   watermark: false,
   output_format: 'mp4',

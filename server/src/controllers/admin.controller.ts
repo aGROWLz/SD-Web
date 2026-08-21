@@ -25,7 +25,7 @@ export const getAllUsers = async (req: AuthRequest, res: Response) => {
           canGenerate: true,
           createdAt: true,
           _count: {
-            select: { tasks: true },
+            select: { tasks: true, publicAssets: true, usageLogs: true },
           },
         },
         orderBy: { createdAt: 'desc' },

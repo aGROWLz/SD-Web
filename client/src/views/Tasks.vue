@@ -28,7 +28,7 @@
       </div>
 
       <div class="tasks-grid">
-        <div v-for="task in filteredTasks" :key="task.id" class="task-card">
+        <div v-for="task in filteredTasks" :key="task.id" class="task-card" :class="{ 'prompt-open': expandedTaskId === task.id }">
           <div class="task-thumbnail">
             <TaskVideoPreview v-if="task.status === 'COMPLETED' && task.videoUrl" :task-id="task.id" />
             <img v-else-if="task.thumbnailUrl" :src="task.thumbnailUrl" alt="Video thumbnail" />
@@ -59,7 +59,14 @@
               </el-dropdown>
             </div>
 
-            <div class="task-description">{{ task.description }}</div>
+            <div class="task-description-block">
+              <div class="task-description">{{ task.description }}</div>
+              <button v-if="task.description.length > 120" type="button" class="task-prompt-expand" :aria-expanded="expandedTaskId === task.id" @click="toggleTaskPrompt(task.id)">
+                <span>{{ expandedTaskId === task.id ? '收起提示词' : '展开完整提示词' }}</span>
+                <el-icon :class="{ rotated: expandedTaskId === task.id }"><ArrowDown /></el-icon>
+              </button>
+              <div v-if="expandedTaskId === task.id" class="task-prompt-panel">{{ task.description }}</div>
+            </div>
 
             <div class="task-meta">
               <div class="meta-item">
@@ -103,7 +110,8 @@ import {
   Delete, 
   Clock, 
   Timer,
-  VideoCamera 
+  VideoCamera,
+  ArrowDown
 } from '@element-plus/icons-vue'
 import { tasksApi, type Task } from '@/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -116,6 +124,10 @@ const statusFilter = ref('')
 const loading = ref(false)
 const tasks = ref<Task[]>([])
 const router = useRouter()
+const expandedTaskId = ref<string | null>(null)
+const toggleTaskPrompt = (taskId: string) => {
+  expandedTaskId.value = expandedTaskId.value === taskId ? null : taskId
+}
 
 // WebSocket 实时更新
 const { connect, disconnect, on, off } = useSocket()
@@ -351,7 +363,7 @@ const goToCreate = () => router.push('/create')
   background: var(--bg-secondary);
   border: 1px solid var(--border-default);
   border-radius: 8px;
-  overflow: hidden;
+  overflow: visible;
   transition: all var(--transition-base);
 }
 
@@ -414,7 +426,23 @@ const goToCreate = () => router.push('/create')
   font-size: 13px;
   color: var(--text-secondary);
   line-height: 1.5;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
 }
+
+.task-card.prompt-open {
+  position: relative;
+  z-index: 50;
+}
+
+.task-description-block { position: relative; min-width: 0; }
+.task-prompt-expand { display: inline-flex; align-items: center; gap: 3px; margin-top: 5px; padding: 0; border: 0; color: var(--accent-primary); background: transparent; font-size: 11px; cursor: pointer; }
+.task-prompt-expand .el-icon { transition: transform .18s ease; }
+.task-prompt-expand .el-icon.rotated { transform: rotate(180deg); }
+.task-prompt-panel { position: absolute; z-index: 20; top: calc(100% + 8px); left: 0; width: min(420px, calc(100vw - 32px)); max-height: 260px; overflow: auto; padding: 11px 13px; border: 1px solid var(--border-emphasis); border-radius: 6px; color: var(--text-primary); background: var(--bg-elevated); box-shadow: 0 14px 34px rgba(0,0,0,.42); font-size: 12px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 .task-meta {
   display: flex;

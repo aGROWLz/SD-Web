@@ -23,8 +23,8 @@
       </div>
 
       <div class="users-table-card">
-        <el-table :data="filteredUsers" stripe v-loading="loading">
-          <el-table-column prop="id" label="ID" width="80" />
+        <el-table :data="filteredUsers" v-loading="loading">
+          <el-table-column prop="id" label="ID" width="280" show-overflow-tooltip />
           <el-table-column prop="email" label="邮箱" min-width="200" />
           <el-table-column label="角色" width="120">
             <template #default="{ row }">
@@ -34,6 +34,8 @@
             </template>
           </el-table-column>
           <el-table-column prop="tasksCount" label="任务数" width="100" align="center" />
+          <el-table-column prop="assetsCount" label="素材数" width="100" align="center" />
+          <el-table-column prop="usageLogsCount" label="用量记录" width="110" align="center" />
           <el-table-column label="注册时间" width="180">
             <template #default="{ row }">
               {{ formatDate(row.createdAt) }}
@@ -68,6 +70,8 @@ const fetchUsers = async () => {
     users.value = data.users.map(user => ({
       ...user,
       tasksCount: user._count.tasks,
+      assetsCount: user._count.publicAssets,
+      usageLogsCount: user._count.usageLogs,
       permissionSaving: false
     }))
   } catch (error: any) {
@@ -202,7 +206,11 @@ const formatDate = (dateString: string) => {
 }
 
 :deep(.el-table--striped .el-table__body tr.el-table__row--striped) {
-  background: var(--bg-elevated);
+  background: transparent;
+}
+
+:deep(.el-table--striped .el-table__body tr.el-table__row--striped > td.el-table__cell) {
+  background: transparent;
 }
 
 :deep(.el-table__body tr:hover > td) {

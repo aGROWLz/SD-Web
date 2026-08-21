@@ -1,10 +1,13 @@
 <template>
   <section class="create-composer" aria-label="视频创作输入框">
+    <el-tooltip content="清空提示词和素材" placement="left">
+      <el-button class="clear-composer-button" circle :icon="Delete" aria-label="清空提示词和素材" @click="emit('clear-composer')" />
+    </el-tooltip>
     <div v-if="form.assets.length" class="material-strip">
       <div v-for="asset in form.assets" :key="asset.id" class="material-chip">
         <TaskAssetPreview :asset="asset" :task-id="asset.previewTaskId" :compact="true" />
         <el-tooltip content="移除素材">
-          <el-button class="remove-material" text circle :icon="Close" :disabled="submitting" aria-label="移除素材" @click="emit('remove-asset', asset.id)" />
+          <el-button class="remove-material" text circle :icon="Close" aria-label="移除素材" @click="emit('remove-asset', asset.id)" />
         </el-tooltip>
       </div>
     </div>
@@ -14,9 +17,7 @@
       class="prompt-input"
       type="textarea"
       :rows="3"
-      maxlength="500"
       resize="none"
-      :disabled="submitting"
       placeholder="描述画面、动作、镜头、光线和声音，也可以引用已添加的素材…"
       aria-label="视频提示词"
       @keydown.meta.enter.prevent="emit('submit')"
@@ -31,7 +32,7 @@
     <div class="composer-toolbar">
       <el-popover trigger="click" placement="top-start" :width="156" popper-class="material-popover">
         <template #reference>
-          <el-button class="add-button" circle :icon="Plus" :disabled="submitting" aria-label="添加参考素材" title="添加参考素材" />
+          <el-button class="add-button" circle :icon="Plus" aria-label="添加参考素材" title="添加参考素材" />
         </template>
         <div class="material-menu">
           <button type="button" @click="emit('local-upload')"><el-icon><Upload /></el-icon>本地上传</button>
@@ -39,7 +40,11 @@
         </div>
       </el-popover>
 
-      <ParameterBar :form="form" :disabled="submitting" @model-change="emit('model-change')" />
+      <ParameterBar :form="form" :disabled="false" @model-change="emit('model-change')" />
+
+      <el-tooltip content="保存到批量任务">
+        <el-button class="save-batch-button" circle :icon="DocumentAdd" aria-label="保存到批量任务" @click="emit('save-batch')" />
+      </el-tooltip>
 
       <el-tooltip content="生成视频">
         <el-button
@@ -58,7 +63,7 @@
 </template>
 
 <script setup lang="ts">
-import { Close, FolderOpened, Plus, Promotion, Upload, WarningFilled } from '@element-plus/icons-vue'
+import { Close, Delete, DocumentAdd, FolderOpened, Plus, Promotion, Upload, WarningFilled } from '@element-plus/icons-vue'
 import ParameterBar from './ParameterBar.vue'
 import TaskAssetPreview from './TaskAssetPreview.vue'
 import type { CreateFormState } from '@/features/create/seedance'
@@ -76,6 +81,8 @@ const emit = defineEmits<{
   'asset-library': []
   'remove-asset': [id: string]
   'model-change': []
+  'save-batch': []
+  'clear-composer': []
   submit: []
 }>()
 
@@ -86,6 +93,7 @@ const emit = defineEmits<{
 
 <style scoped>
 .create-composer {
+  position: relative;
   width: 100%;
   overflow: hidden;
   border: 1px solid var(--border-emphasis);
@@ -94,6 +102,8 @@ const emit = defineEmits<{
   box-shadow: 0 18px 46px rgba(0, 0, 0, .28);
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
+
+.clear-composer-button{position:absolute;z-index:4;top:10px;right:12px;width:30px;height:30px;padding:0;border:1px solid var(--border-default);color:var(--text-secondary);background:var(--bg-elevated)}.clear-composer-button:hover{color:var(--error);border-color:rgba(240,120,120,.5);background:var(--error-light)}
 
 .create-composer:focus-within {
   border-color: rgba(101, 214, 179, .48);

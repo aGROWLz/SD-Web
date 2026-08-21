@@ -63,10 +63,6 @@ export const validateCreateTask = (req: Request, res: Response, next: NextFuncti
     throw new AppError('提示词格式不正确', 400);
   }
 
-  if (typeof prompt === 'string' && prompt.length > 500) {
-    throw new AppError('提示词不能超过500个字符', 400);
-  }
-
   const content = req.body.params?.content;
   if ((!prompt || !prompt.trim()) && (!Array.isArray(content) || content.length === 0)) {
     throw new AppError('提示词或参考素材至少需要填写一项', 400);

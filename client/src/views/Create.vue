@@ -1,10 +1,5 @@
 <template>
   <div class="create-page">
-    <header class="page-header">
-      <div><p class="eyebrow">CREATE WITH SEEDANCE</p><h1>视频创作</h1></div>
-      <span class="system-status"><i></i>系统就绪</span>
-    </header>
-
     <el-alert v-if="!canGenerate" title="当前账号暂未获得视频生成权限，请联系管理员开通。" type="warning" :closable="false" show-icon class="access-alert" />
 
     <main class="conversation-workspace">
@@ -20,8 +15,25 @@
           @remove-asset="removeAsset"
           @model-change="handleModelChange"
           @submit="submitTask"
+          @save-batch="saveBatchDraft"
+          @clear-composer="clearComposerContent"
         />
       </div>
+      <aside class="batch-panel">
+        <div class="batch-header"><div><strong>批量任务</strong><span>{{ batchDrafts.length }} 个任务</span></div><el-button size="small" type="primary" :disabled="!batchDrafts.length || batchStarting || batchCooldown > 0" @click="startBatch">{{ batchCooldown > 0 ? `请等待 ${batchCooldown} 秒` : '批量开始生成' }}</el-button></div>
+        <div v-if="!batchDrafts.length" class="batch-empty">保存配置后会出现在这里</div>
+        <div v-for="(draft, index) in batchDrafts" :key="draft.id" class="batch-card">
+          <div class="batch-card-top"><span>#{{ index + 1 }} <em v-if="draft.status">{{ draft.status === 'running' ? '提交中' : '已提交' }}</em></span><el-button text circle size="small" :disabled="draft.status === 'running'" @click="removeBatchDraft(draft.id)"><el-icon><Delete /></el-icon></el-button></div>
+          <div class="batch-prompt-block">
+            <p class="batch-prompt">{{ draft.form.prompt || '仅使用参考素材' }}</p>
+            <button v-if="draft.form.prompt.length > 120" type="button" class="batch-prompt-expand" @click="expandedBatchPromptId = expandedBatchPromptId === draft.id ? null : draft.id">{{ expandedBatchPromptId === draft.id ? '收起提示词' : '展开完整提示词' }}</button>
+            <div v-if="expandedBatchPromptId === draft.id" class="batch-prompt-panel">{{ draft.form.prompt }}</div>
+          </div>
+          <div v-if="draft.form.assets.length" class="batch-assets"><TaskAssetPreview v-for="asset in draft.form.assets" :key="asset.id" :asset="asset" :compact="true" /></div>
+          <small>{{ draft.form.model }} · {{ draft.form.duration === -1 ? '智能时长' : `${draft.form.duration} 秒` }} · {{ draft.form.assets.length }} 个素材</small>
+          <el-button link type="primary" size="small" @click="editBatchDraft(draft)">编辑</el-button>
+        </div>
+      </aside>
     </main>
 
     <PublicAssetPicker v-model="assetLibraryOpen" :selected-assets="form.assets" @select="togglePublicAsset" />
@@ -33,10 +45,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Delete } from '@element-plus/icons-vue'
 import { tasksApi, type Task } from '@/api/tasks'
 import { assetsApi } from '@/api/assets'
 import ConversationTimeline from '@/components/create/ConversationTimeline.vue'
 import CreateComposer from '@/components/create/CreateComposer.vue'
+import TaskAssetPreview from '@/components/create/TaskAssetPreview.vue'
 import PublicAssetPicker from '@/components/create/PublicAssetPicker.vue'
 import {
   buildTaskRequest,
@@ -76,6 +90,47 @@ const composerHost = ref<HTMLElement>()
 const canGenerate = computed(() => authStore.isAdmin() || authStore.user?.canGenerate !== false)
 const { connect } = useSocket()
 const userId = computed(() => authStore.user?.id || '')
+const formStorageKey = computed(() => `seedance:create-form:${userId.value}`)
+interface BatchDraft { id: string; form: CreateFormState; status?: 'running' | 'submitted' }
+const batchDrafts = ref<BatchDraft[]>([])
+const expandedBatchPromptId = ref<string | null>(null)
+const batchStarting = ref(false)
+const batchCooldown = ref(0)
+let batchCooldownTimer: ReturnType<typeof setInterval> | undefined
+const batchStorageKey = computed(() => `seedance:batch-drafts:${userId.value}`)
+
+const loadBatchDrafts = () => { try { const value = localStorage.getItem(batchStorageKey.value); batchDrafts.value = value ? JSON.parse(value) : [] } catch { batchDrafts.value = [] } }
+const persistBatchDrafts = () => { try { localStorage.setItem(batchStorageKey.value, JSON.stringify(batchDrafts.value)) } catch { ElMessage.warning('批量任务保存失败，浏览器存储空间不足') } }
+const saveBatchDraft = () => { if (!form.prompt.trim() && !form.assets.length) { ElMessage.warning('请先填写提示词或添加素材'); return }; batchDrafts.value.push({ id: `batch-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, form: cloneCreateForm(form) }); persistBatchDrafts(); ElMessage.success('已保存到批量任务') }
+const removeBatchDraft = (id: string) => { batchDrafts.value = batchDrafts.value.filter(item => item.id !== id); persistBatchDrafts() }
+const editBatchDraft = (draft: BatchDraft) => { if (draft.status === 'running') return; Object.assign(form, cloneCreateForm(draft.form)); normalizeModelSettings(form); removeBatchDraft(draft.id) }
+const startBatch = async () => {
+  if (batchStarting.value || batchCooldown.value > 0) return
+  const drafts = batchDrafts.value.filter((draft) => !draft.status).map((draft) => ({ ...draft }))
+  if (!drafts.length) return
+  batchStarting.value = true
+  drafts.forEach((draft) => { const item = batchDrafts.value.find((candidate) => candidate.id === draft.id); if (item) item.status = 'running' })
+  persistBatchDrafts()
+  await Promise.all(drafts.map((draft) => submitSnapshot(draft.form, false)))
+  drafts.forEach((draft) => { const item = batchDrafts.value.find((candidate) => candidate.id === draft.id); if (item) item.status = 'submitted' })
+  persistBatchDrafts()
+  batchStarting.value = false
+  batchCooldown.value = 5
+  batchCooldownTimer = setInterval(() => { batchCooldown.value -= 1; if (batchCooldown.value <= 0 && batchCooldownTimer) { clearInterval(batchCooldownTimer); batchCooldownTimer = undefined } }, 1000)
+  ElMessage.success('批量任务已提交')
+}
+
+const restoreComposer = () => {
+  if (!userId.value) return
+  try {
+    const saved = localStorage.getItem(formStorageKey.value)
+    if (!saved) return
+    const parsed = JSON.parse(saved) as Partial<CreateFormState>
+    Object.assign(form, parsed)
+    form.assets = Array.isArray(parsed.assets) ? parsed.assets : []
+    normalizeModelSettings(form)
+  } catch { /* ignore invalid local draft */ }
+}
 
 const handleModelChange = () => {
   normalizeModelSettings(form)
@@ -170,7 +225,9 @@ const submitSnapshot = async (source: CreateFormState, clearComposer: boolean) =
       parameterSummary: buildParameterSummary(persistedSnapshot),
       createdAt: response.data.task.createdAt,
     })
-    if (clearComposer) clearComposerContent()
+    // 并发提交时，较早任务完成上传不能清空用户正在准备的下一条任务。
+    // 只有配置框仍与本次提交快照一致时才执行清空。
+    if (clearComposer && JSON.stringify(form) === JSON.stringify(snapshot)) clearComposerContent()
     formError.value = ''
   } catch (error: any) {
     patchEntry(entry.id, {
@@ -183,7 +240,6 @@ const submitSnapshot = async (source: CreateFormState, clearComposer: boolean) =
 }
 
 const submitTask = async () => {
-  if (submitting.value) return
   formError.value = validateCreateForm(form)
   if (formError.value || !canGenerate.value) return
   await submitSnapshot(form, true)
@@ -251,17 +307,25 @@ const handleTaskFailed = (event: Event) => {
 
 onMounted(() => {
   connect()
+  restoreComposer()
   void loadTaskHistory()
+  loadBatchDrafts()
   window.addEventListener('task:update', handleTaskUpdate)
   window.addEventListener('task:completed', handleTaskCompleted)
   window.addEventListener('task:failed', handleTaskFailed)
 })
+
+watch(form, (value) => {
+  if (!userId.value) return
+  try { localStorage.setItem(formStorageKey.value, JSON.stringify(value)) } catch { /* storage quota; task submission still works */ }
+}, { deep: true })
 
 watch(entries, (value) => {
   if (userId.value) void saveTimelineEntries(userId.value, value.filter((entry) => !entry.taskId))
 }, { deep: true })
 
 onUnmounted(() => {
+  if (batchCooldownTimer) clearInterval(batchCooldownTimer)
   window.removeEventListener('task:update', handleTaskUpdate)
   window.removeEventListener('task:completed', handleTaskCompleted)
   window.removeEventListener('task:failed', handleTaskFailed)
@@ -270,4 +334,9 @@ onUnmounted(() => {
 
 <style scoped>
 .create-page{display:flex;width:min(1120px,100%);height:calc(100dvh - 128px);min-height:0;margin:0 auto;overflow:hidden;flex-direction:column}.page-header{display:flex;flex:0 0 auto;align-items:flex-end;justify-content:space-between;gap:16px;padding:2px 2px 14px;border-bottom:1px solid var(--border-subtle)}.eyebrow{margin:0 0 6px;color:var(--accent-primary);font-size:10px;font-weight:700;letter-spacing:.12em}.page-header h1{margin:0;color:var(--text-primary);font-size:24px;font-weight:720;line-height:1.2;letter-spacing:0}.system-status{display:flex;align-items:center;gap:7px;padding-bottom:3px;color:var(--text-muted);font-size:11px}.system-status i{width:6px;height:6px;border-radius:50%;background:var(--success);box-shadow:0 0 0 4px var(--success-light)}.access-alert{flex:0 0 auto;margin-top:14px}.conversation-workspace{display:flex;flex:1 1 auto;min-height:0;overflow:hidden;flex-direction:column}.composer-dock{position:relative;z-index:3;flex:0 0 auto;padding:12px 4px 2px;background:var(--bg-primary);box-shadow:0 -14px 28px rgba(6,10,11,.32)}@media(max-width:720px){.create-page{height:calc(100dvh - 138px)}.page-header{padding-top:0}.page-header h1{font-size:21px}.system-status{padding-bottom:1px}.composer-dock{padding:8px 2px 0}}
+.create-page{position:relative}.batch-panel{position:absolute;z-index:4;top:0;right:0;bottom:0;width:248px;display:flex;flex-direction:column;gap:10px;padding:14px;border-left:1px solid var(--border-default);background:var(--bg-secondary);overflow:auto}.batch-header{display:flex;align-items:center;justify-content:space-between;gap:8px}.batch-header strong{display:block;color:var(--text-primary);font-size:13px}.batch-header span{display:block;margin-top:3px;color:var(--text-muted);font-size:10px}.batch-empty{padding:28px 8px;color:var(--text-muted);font-size:11px;text-align:center}.batch-card{padding:10px;border:1px solid var(--border-default);border-radius:6px;background:var(--bg-elevated)}.batch-card-top{display:flex;align-items:center;justify-content:space-between;color:var(--accent-primary);font-size:11px}.batch-card p{display:-webkit-box;margin:8px 0 5px;overflow:hidden;color:var(--text-primary);font-size:12px;line-height:1.45;-webkit-box-orient:vertical;-webkit-line-clamp:3}.batch-card small{display:block;margin-bottom:5px;color:var(--text-muted);font-size:10px}.save-batch-button{flex:0 0 38px;width:38px;height:38px;color:var(--text-secondary);background:var(--bg-elevated)}
+@media(min-width:901px){.conversation-workspace{padding-right:248px}}@media(max-width:900px){.batch-panel{position:relative;top:auto;right:auto;bottom:auto;width:auto;max-height:220px;border-top:1px solid var(--border-default);border-left:0}.conversation-workspace{overflow:auto;padding-right:0}}
+.create-page{width:100%;height:calc(100dvh - 96px);margin:0}
+.batch-prompt-block{position:relative;min-width:0}.batch-prompt{display:-webkit-box;margin:8px 0 3px;overflow:hidden;color:var(--text-primary);font-size:12px;line-height:1.45;-webkit-box-orient:vertical;-webkit-line-clamp:2}.batch-prompt-expand{padding:0;border:0;color:var(--accent-primary);background:transparent;font-size:10px;cursor:pointer}.batch-prompt-panel{position:absolute;z-index:30;top:calc(100% + 6px);right:0;left:auto;width:min(360px,calc(100vw - 32px));max-height:180px;overflow:auto;padding:10px;border:1px solid var(--border-emphasis);border-radius:6px;color:var(--text-primary);background:var(--bg-elevated);box-shadow:0 12px 30px rgba(0,0,0,.45);font-size:12px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}.batch-assets{display:flex;gap:5px;max-width:100%;overflow-x:auto;padding:3px 0 5px}.batch-assets :deep(.asset-preview){flex:0 0 40px;width:40px;height:40px}.batch-assets :deep(.asset-visual){height:40px;min-height:0}.batch-assets :deep(.material-type-icon){width:12px;height:12px;right:2px;bottom:2px;font-size:8px}.batch-panel{overflow:visible}.batch-card{position:relative}.batch-card:has(.batch-prompt-panel){z-index:40}:global(.main-content){height:100%;min-width:0;min-height:0;overflow:hidden}
 </style>
+

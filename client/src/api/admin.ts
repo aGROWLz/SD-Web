@@ -7,6 +7,8 @@ export interface AdminUser {
   createdAt: string
   _count: {
     tasks: number
+    publicAssets: number
+    usageLogs: number
   }
   canGenerate: boolean
 }
