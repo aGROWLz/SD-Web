@@ -30,7 +30,8 @@
       <div class="tasks-grid">
         <div v-for="task in filteredTasks" :key="task.id" class="task-card">
           <div class="task-thumbnail">
-            <img v-if="task.thumbnailUrl" :src="task.thumbnailUrl" alt="Video thumbnail" />
+            <TaskVideoPreview v-if="task.status === 'COMPLETED' && task.videoUrl" :task-id="task.id" />
+            <img v-else-if="task.thumbnailUrl" :src="task.thumbnailUrl" alt="Video thumbnail" />
             <div v-else class="thumbnail-placeholder">
               <el-icon :size="48"><VideoCamera /></el-icon>
             </div>
@@ -108,6 +109,7 @@ import { tasksApi, type Task } from '@/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { useSocket } from '@/composables/useSocket'
+import TaskVideoPreview from '@/components/create/TaskVideoPreview.vue'
 
 const searchQuery = ref('')
 const statusFilter = ref('')
@@ -341,14 +343,14 @@ const goToCreate = () => router.push('/create')
 
 .tasks-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
   gap: var(--spacing-lg);
 }
 
 .task-card {
   background: var(--bg-secondary);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
+  border-radius: 8px;
   overflow: hidden;
   transition: all var(--transition-base);
 }
@@ -389,7 +391,7 @@ const goToCreate = () => router.push('/create')
 }
 
 .task-content {
-  padding: var(--spacing-lg);
+  padding: var(--spacing-md);
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
@@ -409,7 +411,7 @@ const goToCreate = () => router.push('/create')
 }
 
 .task-description {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text-secondary);
   line-height: 1.5;
 }

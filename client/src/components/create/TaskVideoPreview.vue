@@ -70,6 +70,7 @@ let playerObjectUrl = ''
 let thumbnailController: AbortController | undefined
 let playerController: AbortController | undefined
 let disposed = false
+let thumbnailRetryTimer: ReturnType<typeof setTimeout> | undefined
 
 const releaseThumbnail = () => {
   if (thumbnailObjectUrl) URL.revokeObjectURL(thumbnailObjectUrl)
@@ -88,6 +89,7 @@ const handleThumbnailError = () => {
 }
 
 const loadThumbnail = async () => {
+  if (thumbnailRetryTimer) { clearTimeout(thumbnailRetryTimer); thumbnailRetryTimer = undefined }
   thumbnailController?.abort()
   releaseThumbnail()
   thumbnailUrl.value = ''
@@ -102,7 +104,10 @@ const loadThumbnail = async () => {
     thumbnailObjectUrl = URL.createObjectURL(response.data)
     thumbnailUrl.value = thumbnailObjectUrl
   } catch {
-    if (!controller.signal.aborted && !disposed) thumbnailUrl.value = ''
+    if (!controller.signal.aborted && !disposed) {
+      thumbnailUrl.value = ''
+      thumbnailRetryTimer = setTimeout(() => { void loadThumbnail() }, 2000)
+    }
   } finally {
     if (thumbnailController === controller) {
       thumbnailLoading.value = false
@@ -192,6 +197,7 @@ watch(() => props.taskId, () => { void loadThumbnail() }, { immediate: true })
 
 onBeforeUnmount(() => {
   disposed = true
+  if (thumbnailRetryTimer) clearTimeout(thumbnailRetryTimer)
   thumbnailController?.abort()
   playerController?.abort()
   releaseThumbnail()

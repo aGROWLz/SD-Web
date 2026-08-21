@@ -13,7 +13,7 @@
       v-model="form.prompt"
       class="prompt-input"
       type="textarea"
-      :rows="5"
+      :rows="3"
       maxlength="500"
       resize="none"
       :disabled="submitting"
@@ -146,7 +146,8 @@ const emit = defineEmits<{
 }
 
 .prompt-input :deep(.el-textarea__inner) {
-  min-height: 138px !important;
+  min-height: 76px !important;
+  height: 76px;
   padding: 18px 20px 10px;
   border: 0;
   background: transparent;
@@ -154,6 +155,13 @@ const emit = defineEmits<{
   color: var(--text-primary);
   font-size: 15px;
   line-height: 1.65;
+  transition: min-height .2s ease, height .2s ease;
+}
+
+.create-composer:hover .prompt-input :deep(.el-textarea__inner),
+.create-composer:focus-within .prompt-input :deep(.el-textarea__inner) {
+  min-height: 138px !important;
+  height: 138px;
 }
 
 .prompt-input :deep(.el-textarea__inner::placeholder) {
@@ -209,9 +217,16 @@ const emit = defineEmits<{
 
 @media (max-width: 760px) {
   .prompt-input :deep(.el-textarea__inner) {
-    min-height: 124px !important;
+    min-height: 70px !important;
+    height: 70px;
     padding: 15px 15px 8px;
     font-size: 14px;
+  }
+
+  .create-composer:hover .prompt-input :deep(.el-textarea__inner),
+  .create-composer:focus-within .prompt-input :deep(.el-textarea__inner) {
+    min-height: 124px !important;
+    height: 124px;
   }
 
   .composer-toolbar {
