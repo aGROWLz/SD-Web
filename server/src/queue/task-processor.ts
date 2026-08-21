@@ -21,7 +21,7 @@ export interface TaskJobData {
 export const setupTaskProcessor = (queue: Queue.Queue) => {
   if (!markProcessorConfigured(queue)) return;
 
-  queue.process(3, async (job: Queue.Job<TaskJobData>) => {
+  queue.process(21, async (job: Queue.Job<TaskJobData>) => {
     const { taskId, relayStationId } = job.data;
 
     console.log(`Processing task ${taskId} with relay station ${relayStationId}`);
