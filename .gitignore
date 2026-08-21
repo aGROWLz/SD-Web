@@ -51,3 +51,6 @@ dump.rdb
 
 # Local worktrees
 .worktrees/
+
+# Reference repositories (local only)
+.ref/
