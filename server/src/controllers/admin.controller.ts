@@ -3,7 +3,7 @@ import prisma from '../lib/prisma';
 import { AuthRequest } from '../types';
 import { assertGenerationAccessUpdate } from '../domain/relay-station';
 import { AppError } from '../middlewares/errorHandler';
-import { getPublicR2StorageConfig, saveR2StorageConfig } from '../services/r2-storage.service';
+import { getPublicR2StorageConfig, saveR2StorageConfig, testR2StorageConnection } from '../services/r2-storage.service';
 
 export const getAllUsers = async (req: AuthRequest, res: Response) => {
   try {
@@ -74,4 +74,8 @@ export const updateStorageConfig = async (req: AuthRequest, res: Response) => {
   if (clearKey !== undefined && typeof clearKey !== 'boolean') throw new AppError('clearKey 必须是布尔值', 400);
   const storage = await saveR2StorageConfig({ workerUrl, keyValue, clearKey });
   res.json({ storage });
+};
+
+export const testStorageConnection = async (_req: AuthRequest, res: Response) => {
+  res.json(await testR2StorageConnection());
 };

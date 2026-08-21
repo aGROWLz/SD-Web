@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   getAllUsers,
   getStorageConfig,
+  testStorageConnection,
   updateStorageConfig,
   updateGenerationAccess,
 } from '../controllers/admin.controller';
@@ -19,5 +20,6 @@ router.get('/users', getAllUsers);
 router.patch('/users/:id/generation-access', validateParamId('id'), validateGenerationAccess, updateGenerationAccess);
 router.get('/storage', getStorageConfig);
 router.put('/storage', updateStorageConfig);
+router.post('/storage/test', testStorageConnection);
 
 export default router;

@@ -40,11 +40,23 @@ const router = createRouter({
           component: () => import('@/views/Tasks.vue'),
           meta: { requiresAuth: true }
         },
+        {
+          path: '/assets',
+          name: 'Assets',
+          component: () => import('@/views/Assets.vue'),
+          meta: { requiresAuth: true }
+        },
         { path: '/keys', redirect: '/tasks' },
         {
           path: '/admin/relay-stations',
           name: 'AdminRelayStations',
           component: () => import('@/views/admin/AdminRelayStations.vue'),
+          meta: { requiresAuth: true, requiresAdmin: true }
+        },
+        {
+          path: '/admin/asset-libraries',
+          name: 'AdminAssetLibraries',
+          component: () => import('@/views/admin/AdminAssetLibraries.vue'),
           meta: { requiresAuth: true, requiresAdmin: true }
         },
         { path: '/admin/keys', redirect: '/admin/relay-stations' },

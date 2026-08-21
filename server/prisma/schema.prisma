@@ -124,6 +124,7 @@ model RelayStation {
   appendApiV3     Boolean  @default(true) @map("append_api_v3")
   modelRedirects  Json?    @map("model_redirects")
   assetLibraryConfig Json?  @map("asset_library_config")
+  assetLibraryId String? @map("asset_library_id")
   apiKeyEncrypted String   @map("api_key_encrypted")
   isActive        Boolean  @default(true) @map("is_active")
   isPrimary       Boolean  @default(false) @map("is_primary")
@@ -132,9 +133,23 @@ model RelayStation {
 
   tasks      Task[]
   usageLogs  UsageLog[]
+  assetLibrary AssetLibrary? @relation(fields: [assetLibraryId], references: [id], onDelete: SetNull)
 
   @@index([isActive, isPrimary])
   @@map("relay_stations")
+}
+
+model AssetLibrary {
+  id String @id @default(uuid())
+  name String
+  provider String
+  config Json
+  apiKeyEncrypted String @map("api_key_encrypted")
+  enabled Boolean @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  relayStations RelayStation[]
+  @@map("asset_libraries")
 }
 
 model PublicAsset {
@@ -145,7 +160,8 @@ model PublicAsset {
   bytes            Int
   contentHash      String                    @unique @map("content_hash")
   localPath        String                    @map("local_path")
-  providerAssetId  String?                   @map("provider_asset_id")
+    providerAssetId  String?                   @map("provider_asset_id")
+    providerLibrary  String?                   @map("provider_library")
   providerStatus   PublicAssetProviderStatus @default(PENDING) @map("provider_status")
   providerUrl      String?                   @map("provider_url")
   providerError    String?                   @map("provider_error")

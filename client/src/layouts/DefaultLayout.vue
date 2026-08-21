@@ -67,6 +67,11 @@
             <span>视频任务</span>
           </el-menu-item>
 
+          <el-menu-item index="/assets">
+            <el-icon><FolderOpened /></el-icon>
+            <span>公共素材库</span>
+          </el-menu-item>
+
           <el-menu-item-group v-if="authStore.isAdmin()" title="系统管理" class="admin-group">
             <el-menu-item index="/admin/users">
               <el-icon><UserFilled /></el-icon>
@@ -75,6 +80,10 @@
             <el-menu-item index="/admin/relay-stations">
               <el-icon><Connection /></el-icon>
               <span>中转站</span>
+            </el-menu-item>
+            <el-menu-item index="/admin/asset-libraries">
+              <el-icon><FolderOpened /></el-icon>
+              <span>素材库</span>
             </el-menu-item>
           </el-menu-item-group>
         </el-menu>
@@ -100,7 +109,8 @@ import {
   VideoCamera,
   Lock,
   MagicStick,
-  Connection
+  Connection,
+  FolderOpened
 } from '@element-plus/icons-vue'
 
 const route = useRoute()

@@ -7,6 +7,11 @@ import { TaskNotifier } from '../websocket/task-notifier';
 import { io } from '../index';
 import { notifyTaskUpdate, notifyTaskCompleted, notifyTaskFailed } from '../socket';
 import { markProcessorConfigured } from './processor-registry';
+import { submitRelayTask } from '../services/relay-task-submission.service';
+import { materializeLocalAssetParams } from '../services/local-asset.service';
+import { getR2StorageConfig, uploadBytesToWorker } from '../services/r2-storage.service';
+import { ensureVideoThumbnail } from '../services/video-thumbnail.service';
+import { resolveStoredVideoPath } from '../services/video-storage.service';
 
 export interface TaskJobData {
   taskId: string;
@@ -57,11 +62,29 @@ export const setupTaskProcessor = (queue: Queue.Queue) => {
       // 创建 SeeDance2 客户端
       const seedance2 = new SeeDance2Service(decryptedKey, relayStation.baseUrl);
 
-      // 构建 SeeDance2 任务参数
-      const seedanceParams = task.params as any;
+      // 每次执行都从本地原文件重新上传，数据库任务参数始终保留本地引用。
+      const storage = await getR2StorageConfig();
+      const materializedParams = await materializeLocalAssetParams(
+        task.params as Record<string, any>,
+        task.userId,
+        {
+          configured: storage.configured,
+          upload: (bytes, filename, contentType) => uploadBytesToWorker(
+            storage.workerUrl,
+            storage.apiKey,
+            bytes,
+            filename,
+            contentType,
+          ),
+        },
+      );
 
-      // 提交任务到 SeeDance2
-      const seedanceTaskId = await seedance2.submitTask(seedanceParams);
+      // 提交时按当前中转站配置转换模型名。
+      const seedanceTaskId = await submitRelayTask(
+        seedance2,
+        materializedParams,
+        relayStation.modelRedirects,
+      );
 
       console.log(`[TaskProcessor] SeeDance2 任务已提交: ${seedanceTaskId}`);
 
@@ -81,6 +104,12 @@ export const setupTaskProcessor = (queue: Queue.Queue) => {
         result.video_url,
         taskId
       );
+
+      try {
+        await ensureVideoThumbnail(resolveStoredVideoPath(localPath));
+      } catch (thumbnailError: any) {
+        console.warn(`[TaskProcessor] 视频首帧生成失败，任务仍保留视频结果: ${thumbnailError.message}`);
+      }
 
       // 更新任务状态为完成
       const completedTask = await prisma.task.update({

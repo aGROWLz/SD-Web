@@ -2,13 +2,9 @@
   <section class="create-composer" aria-label="视频创作输入框">
     <div v-if="form.assets.length" class="material-strip">
       <div v-for="asset in form.assets" :key="asset.id" class="material-chip">
-        <span class="material-icon"><el-icon><component :is="materialIcon(asset.kind)" /></el-icon></span>
-        <span class="material-copy">
-          <strong>{{ asset.label }}</strong>
-          <small>{{ materialLabel(asset.kind) }}</small>
-        </span>
+        <TaskAssetPreview :asset="asset" :task-id="asset.previewTaskId" :compact="true" />
         <el-tooltip content="移除素材">
-          <el-button text circle :icon="Close" :disabled="submitting" aria-label="移除素材" @click="emit('remove-asset', asset.id)" />
+          <el-button class="remove-material" text circle :icon="Close" :disabled="submitting" aria-label="移除素材" @click="emit('remove-asset', asset.id)" />
         </el-tooltip>
       </div>
     </div>
@@ -33,17 +29,14 @@
     </div>
 
     <div class="composer-toolbar">
-      <el-popover v-model:visible="materialMenuVisible" placement="top-start" :width="180" trigger="click">
-        <div class="material-menu" role="menu">
-          <button type="button" role="menuitem" @click="chooseMaterial('image')"><el-icon><Picture /></el-icon><span>添加图片</span></button>
-          <button type="button" role="menuitem" @click="chooseMaterial('audio')"><el-icon><Headset /></el-icon><span>添加音频</span></button>
-          <button type="button" role="menuitem" @click="chooseMaterial('video')"><el-icon><VideoCamera /></el-icon><span>添加视频 URL</span></button>
-        </div>
+      <el-popover trigger="click" placement="top-start" :width="156" popper-class="material-popover">
         <template #reference>
-          <el-tooltip content="添加参考素材">
-            <el-button class="add-button" circle :icon="Plus" :disabled="submitting" aria-label="添加参考素材" />
-          </el-tooltip>
+          <el-button class="add-button" circle :icon="Plus" :disabled="submitting" aria-label="添加参考素材" title="添加参考素材" />
         </template>
+        <div class="material-menu">
+          <button type="button" @click="emit('local-upload')"><el-icon><Upload /></el-icon>本地上传</button>
+          <button type="button" @click="emit('asset-library')"><el-icon><FolderOpened /></el-icon>素材库选择</button>
+        </div>
       </el-popover>
 
       <ParameterBar :form="form" :disabled="submitting" @model-change="emit('model-change')" />
@@ -65,10 +58,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import { Close, Headset, Picture, Plus, Promotion, VideoCamera, WarningFilled } from '@element-plus/icons-vue'
+import { Close, FolderOpened, Plus, Promotion, Upload, WarningFilled } from '@element-plus/icons-vue'
 import ParameterBar from './ParameterBar.vue'
-import type { AssetInput, CreateFormState } from '@/features/create/seedance'
+import TaskAssetPreview from './TaskAssetPreview.vue'
+import type { CreateFormState } from '@/features/create/seedance'
 
 defineProps<{
   form: CreateFormState
@@ -78,21 +71,17 @@ defineProps<{
 }>()
 
 const emit = defineEmits<{
-  'material-command': [command: 'image' | 'audio' | 'video']
+  'add-material': []
+  'local-upload': []
+  'asset-library': []
   'remove-asset': [id: string]
   'model-change': []
   submit: []
 }>()
 
-const materialMenuVisible = ref(false)
+// 保留旧事件名，兼容已有嵌入方；创作页现在使用 local-upload/library 两个明确动作。
+// emit('add-material')
 
-const chooseMaterial = (command: 'image' | 'audio' | 'video') => {
-  materialMenuVisible.value = false
-  emit('material-command', command)
-}
-
-const materialIcon = (kind: AssetInput['kind']) => ({ image: Picture, audio: Headset, video: VideoCamera }[kind])
-const materialLabel = (kind: AssetInput['kind']) => ({ image: '参考图片', audio: '参考音频', video: '参考视频' }[kind])
 </script>
 
 <style scoped>
@@ -119,58 +108,41 @@ const materialLabel = (kind: AssetInput['kind']) => ({ image: '参考图片', au
 }
 
 .material-chip {
-  display: flex;
-  flex: 0 0 204px;
-  align-items: center;
-  gap: 9px;
+  position: relative;
+  display: block;
+  flex: 0 0 48px;
+  width: 48px;
   min-width: 0;
   height: 48px;
-  padding: 7px 5px 7px 9px;
+  padding: 0;
+  overflow: hidden;
   border: 1px solid var(--border-default);
   border-radius: 6px;
   background: var(--bg-elevated);
 }
 
-.material-icon {
-  display: grid;
-  flex: 0 0 30px;
-  width: 30px;
-  height: 30px;
-  place-items: center;
+.material-chip :deep(.asset-preview) {
+  width: 100%;
+  height: 48px;
+  border: 0;
   border-radius: 5px;
-  color: var(--accent-primary);
-  background: var(--accent-light);
 }
 
-.material-copy {
-  min-width: 0;
-  flex: 1;
+.remove-material {
+  position: absolute;
+  z-index: 2;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, .28);
+  color: #fff;
+  background: rgba(7, 10, 11, .58);
 }
 
-.material-copy strong,
-.material-copy small {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.material-copy strong {
-  color: var(--text-primary);
-  font-size: 11px;
-}
-
-.material-copy small {
-  margin-top: 3px;
-  color: var(--text-muted);
+.remove-material :deep(.el-icon) {
   font-size: 10px;
-}
-
-.material-chip :deep(.el-button) {
-  flex: 0 0 28px;
-  width: 28px;
-  height: 28px;
-  color: var(--text-muted);
 }
 
 .prompt-input :deep(.el-textarea__inner) {
@@ -217,6 +189,13 @@ const materialLabel = (kind: AssetInput['kind']) => ({ image: '参考图片', au
 }
 
 .material-menu { display:grid; gap:3px; }.material-menu button { display:flex; width:100%; align-items:center; gap:9px; padding:9px 10px; border:0; border-radius:4px; color:var(--text-secondary); background:transparent; cursor:pointer; text-align:left; font-size:12px; }.material-menu button:hover { color:var(--text-primary); background:var(--accent-light); }.material-menu .el-icon { color:var(--accent-primary); }
+:global(.el-popover.material-popover), :global(.el-popover.material-popover.el-popper) {
+  border-color: var(--border-default) !important;
+  background: var(--bg-elevated) !important;
+  color: var(--text-primary) !important;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, .42) !important;
+}
+:global(.el-popover.material-popover .el-popper__arrow::before) { border-color: var(--border-default) !important; background: var(--bg-elevated) !important; }
 
 .add-button {
   border-color: var(--border-default);
@@ -261,8 +240,6 @@ const materialLabel = (kind: AssetInput['kind']) => ({ image: '参考图片', au
     padding: 10px 10px 0;
   }
 
-  .material-chip {
-    flex-basis: 180px;
-  }
+  .material-chip { flex-basis: 48px; }
 }
 </style>

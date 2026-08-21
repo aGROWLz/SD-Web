@@ -21,6 +21,10 @@ export interface SaveR2StorageInput {
   clearKey?: boolean;
 }
 
+export type R2ConnectionTestResult =
+  | { ok: true; message: string }
+  | { ok: false; code: 'not_configured' | 'auth' | 'network' | 'http' | 'invalid_response'; message: string };
+
 export const parseDataUrl = (value: string): { contentType: string; bytes: Buffer } => {
   const match = /^data:([^;,]+);base64,([A-Za-z0-9+/=]+)$/i.exec(value);
   if (!match) throw new Error('仅支持 Base64 Data URL');
@@ -30,6 +34,42 @@ export const parseDataUrl = (value: string): { contentType: string; bytes: Buffe
 export const buildWorkerUploadUrl = (workerUrl: string, filename: string, apiKey: string): string => {
   const baseUrl = workerUrl.trim().replace(/\/+$/, '');
   return `${baseUrl}/get-upload-url?file=${encodeURIComponent(filename)}&api_key=${encodeURIComponent(apiKey)}`;
+};
+
+export const probeR2Worker = async (
+  workerUrl: string,
+  apiKey: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<R2ConnectionTestResult> => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  let response: Response;
+  try {
+    response = await fetchImpl(buildWorkerUploadUrl(workerUrl, 'connectivity-test.txt', apiKey), { signal: controller.signal });
+  } catch (error: any) {
+    const message = error?.name === 'AbortError' ? '连接超时' : error?.message || '网络请求失败';
+    return { ok: false, code: 'network', message: `无法连接 R2 Worker：${message}` };
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    return { ok: false, code: 'auth', message: `R2 Worker 鉴权失败（${response.status}）` };
+  }
+  if (!response.ok) {
+    return { ok: false, code: 'http', message: `R2 Worker 返回 HTTP ${response.status}` };
+  }
+
+  try {
+    const data = await response.json() as { uploadUrl?: string; publicUrl?: string };
+    if (!data.uploadUrl || !data.publicUrl) {
+      return { ok: false, code: 'invalid_response', message: 'R2 Worker 返回的上传地址不完整' };
+    }
+  } catch {
+    return { ok: false, code: 'invalid_response', message: 'R2 Worker 返回的响应格式无效' };
+  }
+
+  return { ok: true, message: 'R2 Worker 连通测试成功' };
 };
 
 export const maskStorageKey = (key: string): string => {
@@ -76,6 +116,14 @@ export const saveR2StorageConfig = async (input: SaveR2StorageInput): Promise<R2
   return getPublicR2StorageConfig();
 };
 
+export const testR2StorageConnection = async (fetchImpl: typeof fetch = fetch): Promise<R2ConnectionTestResult> => {
+  const config = await getR2StorageConfig();
+  if (!config.configured) {
+    return { ok: false, code: 'not_configured', message: '请先保存完整的 R2 Worker URL 和 Key' };
+  }
+  return probeR2Worker(config.workerUrl, config.apiKey, fetchImpl);
+};
+
 export const uploadDataUrlToR2 = async (
   source: string,
   filename: string,
@@ -84,13 +132,35 @@ export const uploadDataUrlToR2 = async (
   const config = await getR2StorageConfig();
   if (!config.configured) throw new Error('管理员尚未配置 R2 素材存储');
   const { contentType, bytes } = parseDataUrl(source);
-  const response = await fetchImpl(buildWorkerUploadUrl(config.workerUrl, filename, config.apiKey));
+  return uploadBytesToWorker(config.workerUrl, config.apiKey, bytes, filename, contentType, fetchImpl);
+};
+
+export const uploadBytesToWorker = async (
+  workerUrl: string,
+  apiKey: string,
+  bytes: Buffer,
+  filename: string,
+  contentType: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<string> => {
+  const response = await fetchImpl(buildWorkerUploadUrl(workerUrl, filename, apiKey));
   if (!response.ok) throw new Error(`R2 Worker 获取上传地址失败（${response.status}）`);
   const uploadData = await response.json() as { uploadUrl?: string; publicUrl?: string };
   if (!uploadData.uploadUrl || !uploadData.publicUrl) throw new Error('R2 Worker 返回的上传地址不完整');
   const uploadResponse = await fetchImpl(uploadData.uploadUrl, { method: 'PUT', headers: { 'Content-Type': contentType }, body: bytes });
   if (!uploadResponse.ok) throw new Error(`R2 上传失败（${uploadResponse.status}）`);
   return uploadData.publicUrl;
+};
+
+export const uploadBytesToR2 = async (
+  bytes: Buffer,
+  filename: string,
+  contentType: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<string> => {
+  const config = await getR2StorageConfig();
+  if (!config.configured) throw new Error('管理员尚未配置 R2 素材存储');
+  return uploadBytesToWorker(config.workerUrl, config.apiKey, bytes, filename, contentType, fetchImpl);
 };
 
 export interface PrepareUploadOptions {

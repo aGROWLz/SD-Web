@@ -132,14 +132,21 @@ const ensureMediaUrl = (url: string | undefined): string => {
     return value;
   }
 
-  if (/^data:/i.test(value)) {
-    if (!/^data:(image|audio)\/[A-Za-z0-9.+-]+;base64,[A-Za-z0-9+/]+={0,2}$/i.test(value)) {
+  if (/^local-asset:\/\//i.test(value)) {
+    if (!/^local-asset:\/\/[a-f0-9]{64}\.[a-z0-9]{1,10}$/i.test(value)) {
       throw new Error('素材 URL 无效');
     }
     return value;
   }
 
-  throw new Error('素材必须使用 HTTP(S)、asset:// 或受支持的 Data URL');
+  if (/^data:/i.test(value)) {
+    if (!/^data:(image|audio|video)\/[A-Za-z0-9.+-]+;base64,[A-Za-z0-9+/]+={0,2}$/i.test(value)) {
+      throw new Error('素材 URL 无效');
+    }
+    return value;
+  }
+
+  throw new Error('素材必须使用 HTTP(S)、asset://、local-asset:// 或受支持的 Data URL');
 };
 
 const ensureRole = (
@@ -219,7 +226,6 @@ const normalizeContent = (prompt: string, content: SeedanceContent[]): SeedanceC
 
     if (item.type === 'video_url') {
       const url = ensureMediaUrl(item.video_url?.url);
-      if (url.startsWith('data:')) throw new Error('视频仅支持 HTTP(S) URL 或 asset:// 素材 ID');
       ensureRole(item.role, [undefined, 'reference_video'], '视频角色无效');
       normalized.push({ type: 'video_url', video_url: { url }, role: 'reference_video' });
       continue;

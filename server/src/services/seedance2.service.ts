@@ -27,10 +27,13 @@ export interface SeeDance2TaskParams {
   omni_reference_task_type?: 'auto' | 'reference' | 'edit' | 'extend';
 }
 
+export type SeeDance2SubmissionParams = Omit<SeeDance2TaskParams, 'model'> & { model: string };
+
 export interface SeeDance2TaskResponse {
   id: string; // 任务 ID
   status?: 'queued' | 'running' | 'succeeded' | 'failed' | 'expired';
   video_url?: string; // 生成的视频 URL
+  content?: unknown;
   error?: {
     code: string;
     message: string;
@@ -40,6 +43,50 @@ export interface SeeDance2TaskResponse {
   completed_at?: number;
   duration?: number; // 实际生成的视频时长
 }
+
+type JsonRecord = Record<string, unknown>;
+
+const asRecord = (value: unknown): JsonRecord | undefined => (
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? value as JsonRecord
+    : undefined
+);
+
+const asVideoUrl = (value: unknown): string | undefined => {
+  if (typeof value === 'string' && value.trim()) return value;
+  const record = asRecord(value);
+  const url = record?.url;
+  return typeof url === 'string' && url.trim() ? url : undefined;
+};
+
+/**
+ * 中转站可能保留官方响应的包装层。当前实际响应为 content.video_url，
+ * 同时兼容官方顶层和常见 data/output 包装，避免成功任务被误判为无结果。
+ */
+export const extractSeedanceVideoUrl = (payload: unknown): string | undefined => {
+  const root = asRecord(payload);
+  if (!root) return undefined;
+
+  const content = asRecord(root.content);
+  const data = asRecord(root.data);
+  const dataContent = asRecord(data?.content);
+  const output = asRecord(root.output);
+  const outputContent = asRecord(output?.content);
+
+  for (const candidate of [
+    root.video_url,
+    content?.video_url,
+    data?.video_url,
+    dataContent?.video_url,
+    output?.video_url,
+    outputContent?.video_url,
+  ]) {
+    const url = asVideoUrl(candidate);
+    if (url) return url;
+  }
+
+  return undefined;
+};
 
 export class SeeDance2Service {
   private client: AxiosInstance;
@@ -53,14 +100,14 @@ export class SeeDance2Service {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
-      timeout: 30000,
+      timeout: 120000,
     });
   }
 
   /**
    * 提交视频生成任务
    */
-  async submitTask(params: SeeDance2TaskParams): Promise<string> {
+  async submitTask(params: SeeDance2SubmissionParams): Promise<string> {
     try {
       console.log('[SeeDance2] 提交任务:', JSON.stringify(params, null, 2));
 
@@ -94,17 +141,20 @@ export class SeeDance2Service {
     try {
       const response = await this.client.get(`/contents/generations/tasks/${taskId}`);
 
-      console.log(`[SeeDance2] 任务 ${taskId} 状态:`, response.data.status);
+      const payload = asRecord(response.data) || {};
+
+      console.log(`[SeeDance2] 任务 ${taskId} 状态:`, payload.status);
 
       return {
-        id: response.data.id,
-        status: response.data.status,
-        video_url: response.data.video_url,
-        error: response.data.error,
-        created_at: response.data.created_at,
-        started_at: response.data.started_at,
-        completed_at: response.data.completed_at,
-        duration: response.data.duration,
+        id: String(payload.id || taskId),
+        status: payload.status as SeeDance2TaskResponse['status'],
+        video_url: extractSeedanceVideoUrl(payload),
+        content: payload.content,
+        error: payload.error as SeeDance2TaskResponse['error'],
+        created_at: payload.created_at as number | undefined,
+        started_at: payload.started_at as number | undefined,
+        completed_at: payload.completed_at as number | undefined,
+        duration: payload.duration as number | undefined,
       };
     } catch (error: any) {
       console.error('[SeeDance2] 查询任务状态失败:', error.response?.data || error.message);
@@ -117,8 +167,8 @@ export class SeeDance2Service {
    */
   async pollTaskUntilComplete(
     taskId: string,
-    maxAttempts: number = 360, // 最多轮询 30 分钟（每 5 秒一次）
-    intervalMs: number = 5000
+    maxAttempts: number = 1000, // 最多轮询 50 分钟（每 3 秒一次）
+    intervalMs: number = 3000
   ): Promise<SeeDance2TaskResponse> {
     console.log(`[SeeDance2] 开始轮询任务 ${taskId}，最大尝试次数: ${maxAttempts}`);
 

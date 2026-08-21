@@ -29,7 +29,7 @@ export type SeedanceModelName =
 
 export type SeedanceModelRedirects = Partial<Record<SeedanceModelName, string>>
 
-export type AssetLibraryProvider = 'KK' | 'XKU_P4'
+export type AssetLibraryProvider = 'KK' | 'XKU_P5'
 
 export interface AssetLibraryFieldMap {
   url: string
@@ -39,6 +39,7 @@ export interface AssetLibraryFieldMap {
 }
 
 export interface AssetLibraryConfig {
+  name: string
   enabled: boolean
   provider: AssetLibraryProvider
   uploadUrl: string

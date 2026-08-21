@@ -6,8 +6,11 @@ import { setupTaskProcessor } from '../queue/task-processor';
 import path from 'path';
 import fs from 'fs/promises';
 import { config } from '../config/env';
+import { ensureVideoThumbnail } from '../services/video-thumbnail.service';
+import { resolveStoredVideoPath } from '../services/video-storage.service';
 import { normalizeSeedanceRequest } from '../domain/seedance';
-import { getR2StorageConfig, prepareSeedanceParams, uploadDataUrlToR2 } from '../services/r2-storage.service';
+import { buildTaskHistoryWhere } from '../domain/task-query';
+import { persistLocalAssetParams, resolveLocalAssetFile } from '../services/local-asset.service';
 
 // 每日配额限制
 const DAILY_QUOTA: Record<string, number> = {
@@ -88,12 +91,8 @@ export const createTask = async (req: AuthRequest, res: Response) => {
 
     let normalizedParams;
     try {
-      const storage = await getR2StorageConfig();
-      const preparedParams = await prepareSeedanceParams(params, {
-        configured: storage.configured,
-        upload: (source, filename) => uploadDataUrlToR2(source, filename),
-      });
-      normalizedParams = normalizeSeedanceRequest(prompt ?? '', preparedParams);
+      const validatedParams = normalizeSeedanceRequest(prompt ?? '', params);
+      normalizedParams = await persistLocalAssetParams(validatedParams, userId);
     } catch (error: any) {
       return res.status(400).json({ error: error.message });
     }
@@ -168,14 +167,10 @@ export const getTasks = async (req: AuthRequest, res: Response) => {
 
     // 筛选参数
     const status = getQueryParam(req.query.status);
+    const mine = getQueryParam(req.query.mine) === 'true';
 
     // 构建查询条件
-    const where: any = {};
-
-    // 非管理员只能看自己的任务
-    if (userRole !== 'ADMIN') {
-      where.userId = userId;
-    }
+    const where: any = buildTaskHistoryWhere(userId, userRole, mine);
 
     // 状态筛选
     if (status && ['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED'].includes(status)) {
@@ -268,6 +263,55 @@ export const getTask = async (req: AuthRequest, res: Response) => {
 };
 
 /**
+ * 读取任务保存的本地参考素材，用于创作记录预览。
+ */
+export const getTaskAsset = async (req: AuthRequest, res: Response) => {
+  try {
+    const rawId = req.params.id;
+    const rawIndex = req.params.index;
+    const id = Array.isArray(rawId) ? rawId[0] : rawId;
+    const indexValue = Array.isArray(rawIndex) ? rawIndex[0] : rawIndex;
+    const index = Number(indexValue);
+    const userId = req.user!.userId;
+    const userRole = req.user!.role;
+
+    if (!Number.isInteger(index) || index < 0) {
+      return res.status(404).json({ error: '任务素材不存在' });
+    }
+
+    const task = await prisma.task.findUnique({ where: { id } });
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+    if (task.userId !== userId && userRole !== 'ADMIN') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const params = task.params as Record<string, any> | null;
+    const content = Array.isArray(params?.content) ? params.content : [];
+    const item = content[index];
+    const source = item?.image_url?.url ?? item?.video_url?.url ?? item?.audio_url?.url;
+    if (typeof source !== 'string') {
+      return res.status(404).json({ error: '任务素材不存在' });
+    }
+    if (!source.startsWith('local-asset://')) {
+      return res.status(409).json({ error: '历史素材没有本地原文件，请重新选择素材' });
+    }
+
+    try {
+      const asset = await resolveLocalAssetFile(task.userId, source);
+      res.setHeader('Content-Type', asset.contentType);
+      res.setHeader('Content-Disposition', `inline; filename="${asset.filename}"`);
+      res.setHeader('Cache-Control', 'private, max-age=3600');
+      return res.sendFile(asset.filePath);
+    } catch (error: any) {
+      return res.status(404).json({ error: error.message || '本地素材不存在，请重新选择文件' });
+    }
+  } catch (error) {
+    console.error('Get task asset error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+/**
  * 删除/取消任务
  */
 export const deleteTask = async (req: AuthRequest, res: Response) => {
@@ -311,7 +355,7 @@ export const deleteTask = async (req: AuthRequest, res: Response) => {
     // 删除本地文件
     if (task.localPath) {
       try {
-        const filePath = path.join(config.uploadDir, task.localPath);
+        const filePath = resolveStoredVideoPath(task.localPath);
         await fs.unlink(filePath);
         console.log(`Deleted local file: ${filePath}`);
       } catch (error) {
@@ -329,6 +373,42 @@ export const deleteTask = async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Delete task error:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+/**
+ * 返回项目本地保存的视频首帧缩略图，不触碰完整视频响应。
+ */
+export const getTaskThumbnail = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params as { id: string };
+    const userId = req.user!.userId;
+    const userRole = req.user!.role;
+    const task = await prisma.task.findUnique({ where: { id } });
+
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+    if (task.userId !== userId && userRole !== 'ADMIN') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    if (task.status !== 'COMPLETED' || !task.localPath) {
+      return res.status(404).json({ error: 'Video thumbnail not found' });
+    }
+
+    const videoPath = resolveStoredVideoPath(task.localPath);
+    try {
+      await fs.access(videoPath);
+      const thumbnailPath = await ensureVideoThumbnail(videoPath);
+      await fs.access(thumbnailPath);
+      res.setHeader('Content-Type', 'image/jpeg');
+      res.setHeader('Content-Disposition', `inline; filename="${path.basename(thumbnailPath)}"`);
+      res.setHeader('Cache-Control', 'private, max-age=86400');
+      return res.sendFile(thumbnailPath);
+    } catch (error: any) {
+      return res.status(404).json({ error: error.message || 'Video thumbnail not found' });
+    }
+  } catch (error) {
+    console.error('Get task thumbnail error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 };
 
@@ -364,7 +444,7 @@ export const downloadVideo = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Video file not found' });
     }
 
-    const filePath = path.join(config.uploadDir, task.localPath);
+    const filePath = resolveStoredVideoPath(task.localPath);
 
     try {
       await fs.access(filePath);

@@ -160,4 +160,24 @@ describe('normalizeSeedanceRequest', () => {
     })).toThrow('素材 URL 无效');
   });
 
+  it('accepts a validated local asset reference for queued materialization', () => {
+    const uri = `local-asset://${'a'.repeat(64)}.png`;
+    const result = normalizeSeedanceRequest('', {
+      content: [{
+        type: 'image_url',
+        image_url: { url: uri },
+        role: 'reference_image',
+      }],
+    });
+
+    expect(result.content[0]).toMatchObject({ image_url: { url: uri } });
+    expect(() => normalizeSeedanceRequest('', {
+      content: [{
+        type: 'image_url',
+        image_url: { url: 'local-asset://../../secret.png' },
+        role: 'reference_image',
+      }],
+    })).toThrow('素材 URL 无效');
+  });
+
 });

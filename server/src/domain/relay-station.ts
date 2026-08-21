@@ -1,6 +1,6 @@
 export type UserRoleValue = 'ADMIN' | 'USER';
 
-export type AssetLibraryProvider = 'KK' | 'XKU_P4';
+export type AssetLibraryProvider = 'KK' | 'XKU_P5';
 
 export type AssetLibraryFieldMap = {
   url: string;
@@ -10,6 +10,7 @@ export type AssetLibraryFieldMap = {
 };
 
 export type AssetLibraryConfig = {
+  name: string;
   enabled: boolean;
   provider: AssetLibraryProvider;
   uploadUrl: string;
@@ -22,6 +23,7 @@ export type AssetLibraryConfig = {
 
 const ASSET_LIBRARY_DEFAULTS: Record<AssetLibraryProvider, Omit<AssetLibraryConfig, 'provider'>> = {
   KK: {
+    name: 'KK 素材库',
     enabled: true,
     uploadUrl: 'https://ai.kkidc.com/api/v2/assets',
     queryUrl: 'https://ai.kkidc.com/api/v2/assets/{id}',
@@ -30,10 +32,11 @@ const ASSET_LIBRARY_DEFAULTS: Record<AssetLibraryProvider, Omit<AssetLibraryConf
     fields: { url: 'url', assetType: 'asset_type', name: 'name', projectName: '' },
     projectNameValue: 'default',
   },
-  XKU_P4: {
+  XKU_P5: {
+    name: 'XKU p5 素材库',
     enabled: true,
-    uploadUrl: 'https://api-ai.xku.com/ark/p4/v1/assets',
-    queryUrl: 'https://api-ai.xku.com/ark/p4/v1/assets',
+    uploadUrl: 'https://api-ai.xku.com/ark/p5/v1/assets',
+    queryUrl: 'https://api-ai.xku.com/ark/p5/v1/assets',
     authHeader: 'Authorization',
     authPrefix: '',
     fields: { url: 'URL', assetType: 'AssetType', name: 'Name', projectName: 'ProjectName' },
@@ -97,7 +100,7 @@ export const normalizeAssetLibraryConfig = (value: unknown): AssetLibraryConfig 
   if (Object.keys(raw).length === 0) return null;
 
   const provider = raw.provider;
-  if (provider !== 'KK' && provider !== 'XKU_P4') throw new Error('素材库供应商必须是 KK 或 XKU_P4');
+  if (provider !== 'KK' && provider !== 'XKU_P5') throw new Error('素材库供应商必须是 KK 或 XKU_P5');
   const defaults = ASSET_LIBRARY_DEFAULTS[provider];
   const rawFields = raw.fields;
   if (rawFields !== undefined && (typeof rawFields !== 'object' || rawFields === null || Array.isArray(rawFields))) {
@@ -110,6 +113,7 @@ export const normalizeAssetLibraryConfig = (value: unknown): AssetLibraryConfig 
   if (raw.projectNameValue !== undefined && typeof raw.projectNameValue !== 'string') throw new Error('素材库项目名称必须是字符串');
 
   return {
+    name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : `${provider} 素材库`,
     enabled: raw.enabled ?? defaults.enabled,
     provider,
     uploadUrl: normalizeAssetLibraryUrl(raw.uploadUrl ?? defaults.uploadUrl, 'uploadUrl'),

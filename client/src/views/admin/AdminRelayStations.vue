@@ -96,7 +96,7 @@
             <el-form-item label="供应商预设">
               <el-select v-model="selectedAssetLibraryProvider" @change="applyAssetLibraryPreset">
                 <el-option label="KK" value="KK" />
-                <el-option label="XKU p4" value="XKU_P4" />
+                <el-option label="XKU p5" value="XKU_P5" />
               </el-select>
             </el-form-item>
           </div>
@@ -160,6 +160,7 @@ const emptyModelRedirects = (): Record<SeedanceModelName, string> => ({
 })
 const ASSET_LIBRARY_PRESETS: Record<AssetLibraryProvider, AssetLibraryConfig> = {
   KK: {
+    name: 'KK 素材库',
     enabled: true,
     provider: 'KK',
     uploadUrl: 'https://ai.kkidc.com/api/v2/assets',
@@ -169,11 +170,12 @@ const ASSET_LIBRARY_PRESETS: Record<AssetLibraryProvider, AssetLibraryConfig> = 
     fields: { url: 'url', assetType: 'asset_type', name: 'name', projectName: '' },
     projectNameValue: 'default',
   },
-  XKU_P4: {
+  XKU_P5: {
+    name: 'XKU p5 素材库',
     enabled: true,
-    provider: 'XKU_P4',
-    uploadUrl: 'https://api-ai.xku.com/ark/p4/v1/assets',
-    queryUrl: 'https://api-ai.xku.com/ark/p4/v1/assets',
+    provider: 'XKU_P5',
+    uploadUrl: 'https://api-ai.xku.com/ark/p5/v1/assets',
+    queryUrl: 'https://api-ai.xku.com/ark/p5/v1/assets',
     authHeader: 'Authorization',
     authPrefix: '',
     fields: { url: 'URL', assetType: 'AssetType', name: 'Name', projectName: 'ProjectName' },
@@ -338,4 +340,5 @@ onMounted(() => { fetchStations(); fetchStorage() })
 .admin-page :deep(.el-dialog__body){max-height:calc(100vh - 220px);overflow-y:auto}
 .redirect-section{margin:2px 0 18px;padding:16px;border:1px solid var(--border-default);border-radius:8px;background:var(--bg-tertiary)}.redirect-heading{margin-bottom:14px}.redirect-heading h3{margin:0;color:var(--text-primary);font-size:14px;line-height:1.4}.redirect-heading p{margin:5px 0 0;color:var(--text-muted);font-size:12px;line-height:1.5}.redirect-section :deep(.el-form-item:last-child){margin-bottom:0}.redirect-section :deep(.el-form-item__label){font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px}
 @media(max-width:700px){.page-header{align-items:flex-start;flex-direction:column}.summary-grid{grid-template-columns:1fr}.storage-form{grid-template-columns:1fr}.storage-actions{padding-top:4px}.table-shell{overflow:auto}.table-shell :deep(.el-table){min-width:850px}.asset-library-toolbar,.asset-library-grid{grid-template-columns:1fr}}
+.asset-library-grid{display:none}
 </style>

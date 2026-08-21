@@ -8,9 +8,16 @@ export interface AssetInput {
   id: string
   kind: 'image' | 'video' | 'audio'
   source: string
+  previewUrl?: string
   label: string
   role?: ReferenceRole
   roleLabel?: string
+  contentIndex?: number
+  requiresReselect?: boolean
+  previewTaskId?: string
+  publicAssetId?: string
+  loading?: boolean
+  previewDataUrl?: string
 }
 
 export interface CreateFormState {
@@ -37,7 +44,7 @@ export const MODEL_OPTIONS: Array<{ value: ModelId; label: string; resolutions: 
 export const createDefaultForm = (): CreateFormState => ({
   mode: 'reference',
   prompt: '',
-  model: 'doubao-seedance-2-5',
+  model: 'doubao-seedance-2-0-fast',
   resolution: '720p',
   ratio: 'adaptive',
   duration: -1,
@@ -58,6 +65,24 @@ export const normalizeModelSettings = (form: CreateFormState): void => {
 }
 
 export const referenceRoleForKind = (kind: AssetInput['kind']): ReferenceRole => `reference_${kind}`
+
+const MEDIA_EXTENSIONS: Record<AssetInput['kind'], string[]> = {
+  image: ['bmp', 'gif', 'heic', 'heif', 'jpeg', 'jpg', 'png', 'tif', 'tiff', 'webp'],
+  audio: ['aac', 'flac', 'm4a', 'mp3', 'ogg', 'wav'],
+  video: ['avi', 'm4v', 'mkv', 'mov', 'mp4', 'mpeg', 'mpg', 'webm'],
+}
+
+export const assetKindForFile = (file: Pick<File, 'type' | 'name'>): AssetInput['kind'] => {
+  const mimeKind = file.type.toLowerCase().split('/')[0]
+  if (mimeKind === 'image' || mimeKind === 'audio' || mimeKind === 'video') return mimeKind
+
+  const extension = file.name.toLowerCase().split('.').pop() ?? ''
+  const extensionKind = (Object.keys(MEDIA_EXTENSIONS) as AssetInput['kind'][])
+    .find((kind) => MEDIA_EXTENSIONS[kind].includes(extension))
+  if (extensionKind) return extensionKind
+
+  throw new Error('仅支持图片、音频和视频文件')
+}
 
 export const buildTaskRequest = (form: CreateFormState) => {
   const prompt = form.prompt.trim()

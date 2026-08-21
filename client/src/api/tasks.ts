@@ -12,6 +12,8 @@ export interface Task {
   localPath?: string
   errorMessage?: string
   createdAt: string
+  startedAt?: string
+  completedAt?: string
   updatedAt: string
   relayStation?: {
     id: string
@@ -50,7 +52,7 @@ export const tasksApi = {
   },
 
   // 获取任务列表
-  getTasks(params?: { page?: number; limit?: number; status?: string }) {
+  getTasks(params?: { page?: number; limit?: number; status?: string; mine?: boolean }) {
     return client.get<TasksResponse>('/tasks', { params })
   },
 
@@ -59,15 +61,34 @@ export const tasksApi = {
     return client.get<TaskResponse>(`/tasks/${id}`)
   },
 
+  // 获取任务中保存的本地参考素材
+  getTaskAsset(id: string, contentIndex: number, signal?: AbortSignal) {
+    return client.get<Blob>(`/tasks/${id}/assets/${contentIndex}`, {
+      responseType: 'blob',
+      signal,
+      headers: { 'X-Silent-Error': '1' }
+    })
+  },
+
+  // 获取项目本地保存的视频首帧缩略图
+  getTaskThumbnail(id: string, signal?: AbortSignal) {
+    return client.get<Blob>(`/tasks/${id}/thumbnail`, {
+      responseType: 'blob',
+      signal,
+      headers: { 'X-Silent-Error': '1' },
+    })
+  },
+
   // 删除任务
   deleteTask(id: string) {
     return client.delete(`/tasks/${id}`)
   },
 
   // 下载视频
-  downloadVideo(id: string) {
+  downloadVideo(id: string, signal?: AbortSignal) {
     return client.get(`/tasks/${id}/download`, {
-      responseType: 'blob'
+      responseType: 'blob',
+      signal,
     })
   }
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildTaskRequest,
   createDefaultForm,
+  assetKindForFile,
   exceedsDataUrlLimit,
   MAX_DATA_URL_CHARS,
   normalizeModelSettings,
@@ -21,7 +22,7 @@ describe('createDefaultForm', () => {
     expect(createDefaultForm()).toEqual({
       mode: 'reference',
       prompt: '',
-      model: 'doubao-seedance-2-5',
+      model: 'doubao-seedance-2-0-fast',
       resolution: '720p',
       ratio: 'adaptive',
       duration: -1,
@@ -51,7 +52,7 @@ describe('normalizeModelSettings', () => {
   })
 
   it('preserves settings supported by Seedance 2.5', () => {
-    const form = createForm({ resolution: '1080p', duration: 30, output_format: 'mov' })
+    const form = createForm({ model: 'doubao-seedance-2-5', resolution: '1080p', duration: 30, output_format: 'mov' })
 
     normalizeModelSettings(form)
 
@@ -71,6 +72,22 @@ describe('referenceRoleForKind', () => {
   })
 })
 
+describe('assetKindForFile', () => {
+  it.each([
+    [{ type: 'image/png', name: 'frame.png' }, 'image'],
+    [{ type: 'audio/mpeg', name: 'voice.mp3' }, 'audio'],
+    [{ type: 'video/mp4', name: 'clip.mp4' }, 'video'],
+    [{ type: '', name: 'fallback.mov' }, 'video'],
+  ] as const)('detects $name as $type', (file, expected) => {
+    expect(assetKindForFile(file)).toBe(expected)
+  })
+
+  it('rejects unsupported files', () => {
+    expect(() => assetKindForFile({ type: 'application/pdf', name: 'notes.pdf' }))
+      .toThrow('仅支持图片、音频和视频文件')
+  })
+})
+
 describe('buildTaskRequest', () => {
   it('omits the omni task type for a prompt-only 2.5 request', () => {
     const request = buildTaskRequest(createForm({ prompt: 'A calm ocean' }))
@@ -81,6 +98,7 @@ describe('buildTaskRequest', () => {
   it('builds 2.5 reference content with text first and only supported params', () => {
     const form = createForm({
       prompt: '  camera moves forward  ',
+      model: 'doubao-seedance-2-5',
       resolution: '1080p',
       ratio: '16:9',
       duration: 5,

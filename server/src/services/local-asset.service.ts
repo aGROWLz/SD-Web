@@ -1,9 +1,11 @@
 import crypto from 'crypto';
+import prisma from '../lib/prisma';
 import path from 'path';
 import { access, mkdir, readFile, writeFile } from 'fs/promises';
 
 const DEFAULT_ASSET_ROOT = path.resolve(process.cwd(), 'uploads/assets');
 const LOCAL_ASSET_PATTERN = /^local-asset:\/\/([a-f0-9]{64})\.([a-z0-9]{1,10})$/;
+const PUBLIC_ASSET_PATTERN = /^public-asset:\/\/([0-9a-f-]{36})$/i;
 const USER_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 export const MAX_ASSET_BYTES = 30 * 1024 * 1024;
 export const MAX_TOTAL_ASSET_BYTES = 36 * 1024 * 1024;
@@ -170,7 +172,28 @@ export const materializeLocalAssetParams = async <T extends { content?: unknown[
     const entry = item as Record<string, any>;
     const key = mediaUrlKey(entry);
     const source = key ? entry[key]?.url : undefined;
-    if (!key || typeof source !== 'string' || !source.startsWith('local-asset://')) return item;
+    if (!key || typeof source !== 'string') return item;
+    const publicMatch = PUBLIC_ASSET_PATTERN.exec(source);
+    if (publicMatch) {
+      const asset = await (prisma as any).publicAsset.findUnique({ where: { id: publicMatch[1] } });
+      if (!asset) throw new Error('公共素材不存在');
+      if (asset.providerStatus === 'ACTIVE' && asset.providerAssetId) {
+        return { ...entry, [key]: { ...entry[key], url: `asset://${asset.providerAssetId}` } };
+      }
+      if (asset.providerUrl && (asset.providerUrl.startsWith('http://') || asset.providerUrl.startsWith('https://') || asset.providerUrl.startsWith('data:'))) {
+        if (asset.providerUrl.startsWith('data:') && key !== 'image_url') throw new Error('本地音频和视频需要先配置 R2');
+        return { ...entry, [key]: { ...entry[key], url: asset.providerUrl } };
+      }
+      const local = await readFile(path.resolve(process.cwd(), asset.localPath));
+      if (!options.configured) {
+        if (key !== 'image_url') throw new Error('本地音频和视频需要先配置 R2');
+        return { ...entry, [key]: { ...entry[key], url: `data:${asset.contentType};base64,${local.toString('base64')}` } };
+      }
+      const extension = path.extname(asset.filename);
+      const publicUrl = await options.upload(local, `seedance-${key.replace('_url', '')}-${index}-${crypto.randomUUID()}${extension}`, asset.contentType);
+      return { ...entry, [key]: { ...entry[key], url: publicUrl } };
+    }
+    if (!source.startsWith('local-asset://')) return item;
     const asset = await resolveLocalAsset(userId, source, options);
     if (!options.configured) {
       if (key !== 'image_url') throw new Error('本地音频和视频需要先配置 R2');
