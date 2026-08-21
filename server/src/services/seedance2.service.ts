@@ -90,9 +90,10 @@ export const extractSeedanceVideoUrl = (payload: unknown): string | undefined =>
 
 export class SeeDance2Service {
   private client: AxiosInstance;
+  private queryClient: AxiosInstance;
   private apiKey: string;
 
-  constructor(apiKey: string, baseUrl = 'https://ark.cn-beijing.volces.com/api/v3') {
+  constructor(apiKey: string, baseUrl = 'https://ark.cn-beijing.volces.com/api/v3', queryBaseUrl = baseUrl) {
     this.apiKey = apiKey;
     this.client = axios.create({
       baseURL: baseUrl,
@@ -102,6 +103,7 @@ export class SeeDance2Service {
       },
       timeout: 120000,
     });
+    this.queryClient = axios.create({ baseURL: queryBaseUrl, headers: this.client.defaults.headers, timeout: 120000 });
   }
 
   /**
@@ -139,7 +141,7 @@ export class SeeDance2Service {
    */
   async getTaskStatus(taskId: string): Promise<SeeDance2TaskResponse> {
     try {
-      const response = await this.client.get(`/contents/generations/tasks/${taskId}`);
+      const response = await this.queryClient.get(`/contents/generations/tasks/${taskId}`);
 
       const payload = asRecord(response.data) || {};
 

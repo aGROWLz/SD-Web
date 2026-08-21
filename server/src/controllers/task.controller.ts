@@ -6,7 +6,7 @@ import { setupTaskProcessor } from '../queue/task-processor';
 import path from 'path';
 import fs from 'fs/promises';
 import { config } from '../config/env';
-import { ensureVideoThumbnail } from '../services/video-thumbnail.service';
+import { ensureVideoThumbnail, ensureImageThumbnail } from '../services/video-thumbnail.service';
 import { resolveStoredVideoPath } from '../services/video-storage.service';
 import { normalizeSeedanceRequest } from '../domain/seedance';
 import { buildTaskHistoryWhere } from '../domain/task-query';
@@ -298,6 +298,12 @@ export const getTaskAsset = async (req: AuthRequest, res: Response) => {
 
     try {
       const asset = await resolveLocalAssetFile(task.userId, source);
+      if (asset.contentType.startsWith('image/') && req.query.thumbnail === '1') {
+        const thumbnailPath = await ensureImageThumbnail(asset.filePath);
+        res.setHeader('Content-Type', 'image/jpeg');
+        res.setHeader('Cache-Control', 'private, max-age=86400');
+        return res.sendFile(thumbnailPath);
+      }
       res.setHeader('Content-Type', asset.contentType);
       res.setHeader('Content-Disposition', `inline; filename="${asset.filename}"`);
       res.setHeader('Cache-Control', 'private, max-age=3600');

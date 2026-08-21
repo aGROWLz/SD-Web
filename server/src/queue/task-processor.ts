@@ -60,7 +60,7 @@ export const setupTaskProcessor = (queue: Queue.Queue) => {
       const decryptedKey = KeyEncryptionService.decrypt(relayStation.apiKeyEncrypted);
 
       // 创建 SeeDance2 客户端
-      const seedance2 = new SeeDance2Service(decryptedKey, relayStation.baseUrl);
+      const seedance2 = new SeeDance2Service(decryptedKey, relayStation.baseUrl, relayStation.queryBaseUrl || relayStation.baseUrl);
 
       // 每次执行都从本地原文件重新上传，数据库任务参数始终保留本地引用。
       const storage = await getR2StorageConfig();

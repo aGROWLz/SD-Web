@@ -21,6 +21,7 @@ const serialize = (station: any) => ({
   id: station.id,
   name: station.name,
   baseUrl: station.baseUrl,
+  queryBaseUrl: station.queryBaseUrl || station.baseUrl,
   appendApiV3: station.appendApiV3,
   modelRedirects: normalizeModelRedirects(station.modelRedirects),
   assetLibraryConfig: normalizeAssetLibraryConfig(station.assetLibraryConfig),
@@ -57,7 +58,7 @@ export const getRelayStations = async (_req: AuthRequest, res: Response) => {
 };
 
 export const createRelayStation = async (req: AuthRequest, res: Response) => {
-  const { name, baseUrl, keyValue } = req.body;
+  const { name, baseUrl, queryBaseUrl, keyValue } = req.body;
   if (!keyValue?.trim()) throw new AppError('新增中转站必须提供 API Key', 400);
 
   const appendApiV3 = req.body.appendApiV3 !== false;
@@ -76,6 +77,7 @@ export const createRelayStation = async (req: AuthRequest, res: Response) => {
       data: {
         name: name.trim(),
         baseUrl: normalizedUrl,
+        queryBaseUrl: queryBaseUrl?.trim() ? queryBaseUrl.trim().replace(/\/+$/, '') : normalizedUrl,
         appendApiV3,
         modelRedirects: normalizeModelRedirects(req.body.modelRedirects),
         ...(assetLibraryConfig === null ? {} : { assetLibraryConfig }),
@@ -94,13 +96,14 @@ export const updateRelayStation = async (req: AuthRequest, res: Response) => {
   const current = await prisma.relayStation.findUnique({ where: { id } });
   if (!current) throw new AppError('中转站不存在', 404);
 
-  const { name, baseUrl, keyValue } = req.body;
+  const { name, baseUrl, queryBaseUrl, keyValue } = req.body;
   const appendApiV3 = typeof req.body.appendApiV3 === 'boolean'
     ? req.body.appendApiV3
     : current.appendApiV3;
   const data: any = {
     name: name.trim(),
     baseUrl: parseBaseUrl(baseUrl, appendApiV3),
+    ...(queryBaseUrl !== undefined ? { queryBaseUrl: queryBaseUrl?.trim() ? queryBaseUrl.trim().replace(/\/+$/, '') : parseBaseUrl(baseUrl, appendApiV3) } : {}),
     appendApiV3,
   };
   if (req.body.assetLibraryConfig !== undefined) {

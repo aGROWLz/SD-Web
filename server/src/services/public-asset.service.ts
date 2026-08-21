@@ -131,7 +131,7 @@ export const processPublicAssetProvider = async (id: string, options: PublicAsse
     }
     const key = KeyEncryptionService.decrypt(station.apiKeyEncrypted);
     const result = await uploadAsset(config, key, { publicUrl: providerUrl, filename: asset.filename, contentType: asset.contentType }, options.fetchImpl);
-    return db.publicAsset.update({ where: { id }, data: { providerUrl: providerUrl, providerAssetId: result.id, providerLibrary: config.provider, providerStatus: result.status === 'Active' ? 'ACTIVE' : result.status === 'Failed' ? 'FAILED' : 'PENDING', providerError: null } });
+    return db.publicAsset.update({ where: { id }, data: { providerUrl: providerUrl, providerAssetId: result.id, providerLibrary: config.name, providerStatus: result.status === 'Active' ? 'ACTIVE' : result.status === 'Failed' ? 'FAILED' : 'PENDING', providerError: null } });
   } catch (error) {
     return db.publicAsset.update({ where: { id }, data: { providerUrl: providerUrl ?? null, providerStatus: 'FAILED', providerError: providerErrorMessage(error) } });
   }
@@ -144,14 +144,17 @@ export const queryPublicAssetProvider = async (id: string, options: PublicAssetP
   let station = options.relayStation;
   if (station === undefined && asset.providerLibrary) {
     const stations = await db.relayStation.findMany({ where: { isActive: true } });
-    station = stations.find((candidate: any) => normalizeAssetLibraryConfig(candidate.assetLibraryConfig)?.provider === asset.providerLibrary) ?? null;
+    station = stations.find((candidate: any) => {
+      const config = normalizeAssetLibraryConfig(candidate.assetLibraryConfig);
+      return config?.name === asset.providerLibrary || config?.provider === asset.providerLibrary;
+    }) ?? null;
   }
   if (station === undefined) station = await db.relayStation.findFirst({ where: { isActive: true, isPrimary: true } });
   const config = station ? normalizeAssetLibraryConfig(station.assetLibraryConfig) : null;
   if (!config?.enabled || !station) return asset;
   try {
     const result = await queryAsset(config, KeyEncryptionService.decrypt(station.apiKeyEncrypted), asset.providerAssetId, options.fetchImpl);
-    return db.publicAsset.update({ where: { id }, data: { providerLibrary: asset.providerLibrary || config.provider, providerStatus: result.status === 'Active' ? 'ACTIVE' : result.status === 'Failed' ? 'FAILED' : 'PENDING', providerError: null, ...(result.url ? { providerUrl: result.url } : {}) } });
+    return db.publicAsset.update({ where: { id }, data: { providerLibrary: asset.providerLibrary || config.name, providerStatus: result.status === 'Active' ? 'ACTIVE' : result.status === 'Failed' ? 'FAILED' : 'PENDING', providerError: null, ...(result.url ? { providerUrl: result.url } : {}) } });
   } catch (error) {
     return db.publicAsset.update({ where: { id }, data: { providerStatus: 'FAILED', providerError: providerErrorMessage(error) } });
   }

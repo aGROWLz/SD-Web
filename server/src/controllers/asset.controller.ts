@@ -12,6 +12,7 @@ import {
   queryPublicAssetProvider,
 } from '../services/public-asset.service';
 import { normalizeAssetLibraryConfig } from '../domain/relay-station';
+import { ensureImageThumbnail } from '../services/video-thumbnail.service';
 
 const queryValue = (value: unknown): string | undefined => Array.isArray(value) ? String(value[0]) : typeof value === 'string' ? value : undefined;
 const paramValue = (value: unknown): string => Array.isArray(value) ? String(value[0]) : String(value ?? '');
@@ -44,7 +45,7 @@ export const listPublicAssetController = async (req: AuthRequest, res: Response)
     const page = parseInt(queryValue(req.query.page) ?? '1', 10);
     const limit = parseInt(queryValue(req.query.limit) ?? '20', 10);
     const primary = await (prisma as any).relayStation.findFirst({ where: { isActive: true, isPrimary: true } });
-    const primaryProvider = primary ? normalizeAssetLibraryConfig(primary.assetLibraryConfig)?.provider : undefined;
+    const primaryProvider = primary ? normalizeAssetLibraryConfig(primary.assetLibraryConfig)?.name : undefined;
     const result = await listPublicAssets(page, limit, {
       contentType: queryValue(req.query.contentType), keyword: queryValue(req.query.keyword), providerLibrary: primaryProvider,
     });
@@ -55,6 +56,12 @@ export const listPublicAssetController = async (req: AuthRequest, res: Response)
 export const getPublicAssetFile = async (req: AuthRequest, res: Response) => {
   try {
     const asset = await resolvePublicAssetFile(paramValue(req.params.id));
+    if (asset.contentType.startsWith('image/') && req.query.thumbnail === '1') {
+      const thumbnailPath = await ensureImageThumbnail(asset.filePath);
+      res.setHeader('Content-Type', 'image/jpeg');
+      res.setHeader('Cache-Control', 'private, max-age=86400');
+      return res.sendFile(thumbnailPath);
+    }
     res.setHeader('Content-Type', asset.contentType);
     const fallbackName = asset.filename.replace(/[^\x20-\x7E]/g, '_').replace(/"/g, '') || 'asset';
     res.setHeader('Content-Disposition', `inline; filename="${fallbackName}"; filename*=UTF-8''${encodeURIComponent(asset.filename)}`);
@@ -65,6 +72,12 @@ export const getPublicAssetFile = async (req: AuthRequest, res: Response) => {
 export const getPublicAssetFileByProviderId = async (req: AuthRequest, res: Response) => {
   try {
     const asset = await resolvePublicAssetFileByProviderId(paramValue(req.params.providerId));
+    if (asset.contentType.startsWith('image/') && req.query.thumbnail === '1') {
+      const thumbnailPath = await ensureImageThumbnail(asset.filePath);
+      res.setHeader('Content-Type', 'image/jpeg');
+      res.setHeader('Cache-Control', 'private, max-age=86400');
+      return res.sendFile(thumbnailPath);
+    }
     res.setHeader('Content-Type', asset.contentType);
     return res.sendFile(asset.filePath);
   } catch (error) { return handleError(res, error); }
