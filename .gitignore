@@ -54,3 +54,5 @@ dump.rdb
 
 # Reference repositories (local only)
 .ref/
+
+.trae/

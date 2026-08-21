@@ -128,10 +128,30 @@ const fetchTasks = async () => {
   try {
     const { data } = await tasksApi.getTasks({ page: 1, limit: 100 })
     tasks.value = data.tasks
+    data.tasks.forEach(task => { void loadTaskThumbnail(task) })
   } catch (error: any) {
     ElMessage.error(error.response?.data?.error || '获取任务列表失败')
   } finally {
     loading.value = false
+  }
+}
+
+// 每个任务的首帧封面 Blob URL，key 为任务 id
+const thumbnails = ref<Record<string, string>>({})
+
+const loadTaskThumbnail = async (task: Task) => {
+  if (task.status !== 'COMPLETED') return
+  if (thumbnails.value[task.id]) return
+  try {
+    // 优先使用本地保存的视频首帧缩略图接口（返回 JPG），videoUrl 是 MP4 无法作为图片显示
+    const { data } = await tasksApi.getTaskThumbnail(task.id)
+    const url = window.URL.createObjectURL(new Blob([data], { type: 'image/jpeg' }))
+    thumbnails.value = { ...thumbnails.value, [task.id]: url }
+  } catch {
+    // 无本地视频或提取失败时退回外链封面
+    if (task.videoUrl) {
+      thumbnails.value = { ...thumbnails.value, [task.id]: task.videoUrl }
+    }
   }
 }
 
@@ -145,7 +165,7 @@ const filteredTasks = computed(() => {
   }).map(task => ({
     ...task,
     description: task.prompt,
-    thumbnailUrl: task.videoUrl ? task.videoUrl : undefined,
+    thumbnailUrl: thumbnails.value[task.id],
     progress: task.status === 'PROCESSING' ? 50 : undefined
   }))
 })
